@@ -320,6 +320,22 @@ impl Default for Sight {
     }
 }
 
+/// Network identity for replication
+#[derive(Component, Reflect, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[reflect(Component)]
+pub struct NetworkId(pub u64);
+
+/// Marks an entity as predicted on the client
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct Predicted;
+
+/// Marks an entity as authoritative (server-side or interpolated on client)
+#[derive(Component, Reflect)]
+#[reflect(Component)]
+pub struct Authoritative;
+
+
 
 impl Default for Payload {
     /// Creates a default Payload instance with Kinetic damage.

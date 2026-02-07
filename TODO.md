@@ -24,8 +24,9 @@
 
 ### Networking (feature: netcode)
 - [x] Полная интеграция bevy_renet2 (structure setup)
-- [ ] Client-side prediction для projectiles
-- [ ] Server reconciliation
+- [x] Client-side prediction для projectiles (basic spawn)
+- [x] Server reconciliation (authoritative spawn & snapshot)
+
 
 - [ ] Lag compensation для hit detection
 - [ ] Синхронизация состояния оружия

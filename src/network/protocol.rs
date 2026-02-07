@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_renet2::renet::{ChannelConfig, SendType};
+use renet2::{ChannelConfig, SendType};
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
@@ -56,6 +56,13 @@ pub enum ServerMessage {
     PlayerConnected { id: u64 },
     PlayerDisconnected { id: u64 },
     Snapshot(GameStateSnapshot),
+    SpawnProjectile {
+        id: u64,
+        owner_fmt: u64,
+        pos: Vec3,
+        vel: Vec3,
+        weapon_type: u8,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
