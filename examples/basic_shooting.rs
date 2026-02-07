@@ -90,6 +90,7 @@ fn setup(
     commands.insert_resource(WeaponState {
         weapon_type: WeaponType::Rifle,
         accuracy: bevy_bullet_dynamics::systems::accuracy::presets::rifle(),
+        weapon: WeaponType::Rifle.weapon_config(),
     });
 }
 
@@ -103,6 +104,7 @@ struct UiText;
 struct WeaponState {
     weapon_type: WeaponType,
     accuracy: Accuracy,
+    weapon: Weapon,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -145,42 +147,80 @@ impl WeaponType {
             Self::Shotgun => presets::shotgun(),
         }
     }
+
+    fn weapon_config(&self) -> Weapon {
+        let mut weapon = Weapon::default();
+        match self {
+            Self::Pistol => { weapon.fire_rate = 5.0; }
+            Self::Rifle => { weapon.fire_rate = 8.0; }
+            Self::Sniper => { weapon.fire_rate = 1.0; }
+            Self::SMG => { 
+                weapon.fire_rate = 12.0; 
+                weapon.automatic = true;
+            }
+            Self::Shotgun => { weapon.fire_rate = 1.5; }
+        }
+        weapon
+    }
 }
 
 fn handle_input(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
     mut weapon_state: ResMut<WeaponState>,
     shooter: Query<&Transform, With<ShooterMarker>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Weapon selection
+    let mut changed = false;
     if keyboard.just_pressed(KeyCode::Digit1) {
         weapon_state.weapon_type = WeaponType::Pistol;
-        weapon_state.accuracy = WeaponType::Pistol.accuracy();
+        changed = true;
     }
     if keyboard.just_pressed(KeyCode::Digit2) {
         weapon_state.weapon_type = WeaponType::Rifle;
-        weapon_state.accuracy = WeaponType::Rifle.accuracy();
+        changed = true;
     }
     if keyboard.just_pressed(KeyCode::Digit3) {
         weapon_state.weapon_type = WeaponType::Sniper;
-        weapon_state.accuracy = WeaponType::Sniper.accuracy();
+        changed = true;
     }
     if keyboard.just_pressed(KeyCode::Digit4) {
-        weapon_state.accuracy = WeaponType::SMG.accuracy();
+        weapon_state.weapon_type = WeaponType::SMG;
+        changed = true;
     }
     if keyboard.just_pressed(KeyCode::Digit5) {
         weapon_state.weapon_type = WeaponType::Shotgun;
-        weapon_state.accuracy = WeaponType::Shotgun.accuracy();
+        changed = true;
     }
 
-    // Fire
-    if keyboard.just_pressed(KeyCode::Space) {
+    if changed {
+        weapon_state.accuracy = weapon_state.weapon_type.accuracy();
+        weapon_state.weapon = weapon_state.weapon_type.weapon_config();
+        
+        // Reset firing state
+        weapon_state.weapon.last_fire_time = 0.0;
+    }
+
+    // Fire logic
+    let trigger_pulled = if weapon_state.weapon.automatic {
+        keyboard.pressed(KeyCode::Space)
+    } else {
+        keyboard.just_pressed(KeyCode::Space)
+    };
+
+    let current_time = time.elapsed_secs_f64();
+    let can_fire = weapon_state.weapon.can_fire(current_time);
+
+    if trigger_pulled && can_fire {
         let Ok(shooter_transform) = shooter.single() else {
             return;
         };
+
+        // Update last fire time
+        weapon_state.weapon.last_fire_time = current_time;
 
         let origin = shooter_transform.translation;
         let direction = Vec3::new(0.0, 0.0, -1.0); // Forward
@@ -207,7 +247,10 @@ fn handle_input(
         // Determine projectile count and damage
         let (projectile_count, damage) = match weapon_state.weapon_type {
             WeaponType::Shotgun => (8, 5.0),
-            _ => (1, 25.0),
+            WeaponType::Sniper => (1, 80.0),
+            WeaponType::Pistol => (1, 30.0),
+            WeaponType::SMG => (1, 15.0),
+            WeaponType::Rifle => (1, 40.0),
         };
 
         for i in 0..projectile_count {

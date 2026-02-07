@@ -31,7 +31,7 @@
 
 ### Расширение типов оружия
 - [x] Дробовики (множественные projectiles)
-- [ ] Автоматическое оружие (fire rate, burst mode)
+- [x] Автоматическое оружие (fire rate, burst mode)
 - [ ] Управляемые ракеты (homing)
 - [ ] Лазерное оружие (hitscan)
 - [ ] Огнемёты (area damage over time)

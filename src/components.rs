@@ -574,3 +574,75 @@ pub struct ExplosionVFX {
     pub intensity: f32,
 }
 
+/// Weapon component for handling fire rate, automatic fire, and burst modes.
+/// 
+/// This component stores the state of a weapon, allowing for rate-limited firing,
+/// automatic fire, and burst modes.
+/// 
+/// # Fields
+/// * `fire_rate` - Maximum shots per second (0.0 for manual action)
+/// * `last_fire_time` - Timestamp of the last shot
+/// * `automatic` - Whether the weapon fires continuously while trigger is held
+/// * `burst_count` - Number of shots in a burst (0 for standard auto/semi)
+/// * `shots_in_burst` - Counter for shots fired in current burst
+/// * `burst_interval` - Time between shots in a burst (seconds)
+/// 
+/// # Example
+/// ```
+/// use bevy::prelude::*;
+/// use bevy_bullet_dynamics::components::Weapon;
+/// 
+/// let assault_rifle = Weapon {
+///     fire_rate: 10.0, // 600 RPM
+///     automatic: true,
+///     ..Default::default()
+/// };
+/// ```
+#[derive(Component, Reflect, Clone)]
+#[reflect(Component)]
+pub struct Weapon {
+    /// Shots per second (0.0 for manual action)
+    pub fire_rate: f32,
+    /// Last time the weapon was fired
+    pub last_fire_time: f64,
+    /// Whether the weapon is automatic (keeps firing while button held)
+    pub automatic: bool,
+    /// Number of shots in a burst (0 for standard auto/semi)
+    pub burst_count: u32,
+    /// Shots fired in current burst
+    pub shots_in_burst: u32,
+    /// Time between shots in a burst (seconds)
+    pub burst_interval: f32,
+}
+
+impl Default for Weapon {
+    /// Creates a default manual-action weapon.
+    fn default() -> Self {
+        Self {
+            fire_rate: 0.0,
+            last_fire_time: 0.0,
+            automatic: false,
+            burst_count: 0,
+            shots_in_burst: 0,
+            burst_interval: 0.1,
+        }
+    }
+}
+
+impl Weapon {
+    /// Checks if the weapon is ready to fire based on fire rate.
+    ///
+    /// # Arguments
+    /// * `current_time` - Current game time in seconds
+    ///
+    /// # Returns
+    /// True if enough time has passed since the last shot
+    pub fn can_fire(&self, current_time: f64) -> bool {
+        if self.fire_rate <= 0.0 {
+            return true;
+        }
+        let interval = 1.0 / self.fire_rate;
+        current_time - self.last_fire_time >= interval as f64
+    }
+}
+
