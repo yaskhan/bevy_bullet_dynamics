@@ -171,6 +171,9 @@ pub struct BallisticsConfig {
     pub enable_penetration: bool,
     /// Enable ricochet system
     pub enable_ricochet: bool,
+    /// Minimum projectile speed before auto-despawn (m/s)
+    /// Bullets slower than this after impact or flight are considered spent.
+    pub min_projectile_speed: f32,
     /// Debug visualization
     pub debug_draw: bool,
 }
@@ -184,6 +187,7 @@ impl Default for BallisticsConfig {
     /// - 2000 meter maximum projectile distance
     /// - Penetration enabled
     /// - Ricochet enabled
+    /// - 20.0 m/s minimum speed
     /// - Debug drawing disabled
     /// 
     /// # Returns
@@ -195,6 +199,7 @@ impl Default for BallisticsConfig {
             max_projectile_distance: 2000.0,
             enable_penetration: true,
             enable_ricochet: true,
+            min_projectile_speed: 20.0,
             debug_draw: false,
         }
     }

@@ -11,6 +11,7 @@ use avian2d::prelude::*;
 use crate::components::{Payload, Projectile, SurfaceMaterial};
 use crate::events::HitEvent;
 use crate::resources::BallisticsConfig;
+use crate::systems::surface;
 
 /// Handle projectile collisions using raycasting between frames.
 ///
@@ -33,7 +34,7 @@ pub fn handle_collisions(
     mut projectiles: Query<(Entity, &mut Transform, &mut Projectile, Option<&Payload>)>,
     surfaces: Query<&SurfaceMaterial>,
 ) {
-    for (entity, transform, mut projectile, payload) in projectiles.iter_mut() {
+    for (entity, mut transform, mut projectile, payload) in projectiles.iter_mut() {
         let ray_origin = projectile.previous_position;
         let ray_end = transform.translation;
         let ray_direction = ray_end - ray_origin;
@@ -69,7 +70,8 @@ pub fn handle_collisions(
                 &mut hit_events,
                 &config,
                 entity,
-                &projectile,
+                &mut transform,
+                &mut projectile,
                 payload,
                 hit.entity,
                 hit_point,
@@ -92,7 +94,7 @@ pub fn handle_collisions_2d(
     mut projectiles: Query<(Entity, &mut Transform, &mut Projectile, Option<&Payload>)>,
     surfaces: Query<&SurfaceMaterial>,
 ) {
-    for (entity, transform, mut projectile, payload) in projectiles.iter_mut() {
+    for (entity, mut transform, mut projectile, payload) in projectiles.iter_mut() {
         let ray_origin = projectile.previous_position.xy();
         let ray_end = transform.translation.xy();
         let ray_direction = ray_end - ray_origin;
@@ -132,7 +134,8 @@ pub fn handle_collisions_2d(
                 &mut hit_events,
                 &config,
                 entity,
-                &projectile,
+                &mut transform,
+                &mut projectile,
                 payload,
                 hit.entity,
                 hit_point_3d,
@@ -194,7 +197,8 @@ pub fn process_hit(
     hit_events: &mut MessageWriter<HitEvent>,
     config: &BallisticsConfig,
     projectile_entity: Entity,
-    projectile: &Projectile,
+    transform: &mut Transform,
+    projectile: &mut Projectile,
     payload: Option<&Payload>,
     hit_entity: Entity,
     hit_point: Vec3,
@@ -211,15 +215,30 @@ pub fn process_hit(
     let mut ricocheted = false;
 
     if let Some(surface) = surface {
-        // Check for ricochet based on impact angle
-        let impact_angle = projectile.velocity.normalize().dot(-hit_normal).acos();
-
-        if config.enable_ricochet && impact_angle > surface.ricochet_angle {
-            ricocheted = true;
-        } else if config.enable_penetration {
-            // Check penetration
-            if projectile.penetration_power > surface.penetration_loss {
-                penetrated = true;
+        // Ricochet
+        if config.enable_ricochet && surface::should_ricochet(projectile.velocity, hit_normal, surface) {
+            let (new_dir, new_speed) = surface::calculate_ricochet(projectile.velocity, hit_normal, surface);
+            
+            if new_speed > config.min_projectile_speed {
+                ricocheted = true;
+                projectile.velocity = new_dir * new_speed;
+                // Offset hit point slightly along normal to avoid getting stuck inside
+                transform.translation = hit_point + hit_normal * 0.05;
+            }
+        } 
+        // Penetration
+        else if config.enable_penetration {
+            let speed = projectile.velocity.length();
+            let dynamic_power = 0.5 * projectile.mass * speed.powi(2) * 0.25;
+            
+            if dynamic_power > surface.penetration_loss {
+                let exit_vel = surface::calculate_exit_velocity(projectile.velocity, surface, surface.thickness);
+                
+                if exit_vel.length() > config.min_projectile_speed {
+                    penetrated = true;
+                    projectile.velocity = exit_vel;
+                    // Do not snap transform for penetration, it's already past hit_point
+                }
             }
         }
     }

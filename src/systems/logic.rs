@@ -151,14 +151,16 @@ pub fn process_hitscan(
                 &filter,
             ) {
                 let hit_point = start + *direction * hit.distance;
-                let dummy_projectile = crate::components::Projectile::default();
+                let mut dummy_projectile = crate::components::Projectile::default();
 
+                let mut temp_transform = *transform; // Copy current transform
                 collision::process_hit(
                     &mut commands,
                     &mut hit_events,
                     &config,
                     entity,
-                    &dummy_projectile,
+                    &mut temp_transform,
+                    &mut dummy_projectile,
                     payload,
                     hit.entity,
                     hit_point,
@@ -202,14 +204,16 @@ pub fn process_hitscan_2d(
                 let hit_point_3d = Vec3::new(hit_point.x, hit_point.y, transform.translation.z);
                 let hit_normal_3d = Vec3::new(hit.normal.x, hit.normal.y, 0.0);
                 
-                let dummy_projectile = crate::components::Projectile::default();
+                let mut dummy_projectile = crate::components::Projectile::default();
 
+                let mut temp_transform = *transform; // Copy current transform
                 collision::process_hit(
                     &mut commands,
                     &mut hit_events,
                     &config,
                     entity,
-                    &dummy_projectile,
+                    &mut temp_transform,
+                    &mut dummy_projectile,
                     payload,
                     hit.entity,
                     hit_point_3d,

@@ -45,6 +45,7 @@ fn main() {
             max_projectile_distance: 5000.0,
             enable_penetration: true,
             enable_ricochet: true,
+            min_projectile_speed: 20.0,
             debug_draw: true,
         })
         .add_systems(Startup, setup)

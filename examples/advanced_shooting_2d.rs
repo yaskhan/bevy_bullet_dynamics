@@ -23,6 +23,7 @@ fn main() {
             max_projectile_distance: 1000.0,
             enable_penetration: true,
             enable_ricochet: true,
+            min_projectile_speed: 20.0,
             debug_draw: false,
         })
         .insert_resource(WeaponPresets::with_defaults())
