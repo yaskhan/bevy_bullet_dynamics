@@ -1,0 +1,272 @@
+//! Projectile logic system - handles timed fuses, proximity triggers, etc.
+
+use bevy::prelude::*;
+use bevy::ecs::message::MessageWriter;
+
+use crate::components::{Payload, ProjectileLogic};
+use crate::events::{ExplosionEvent, ExplosionType};
+
+/// Process projectile-specific logic (timers, proximity triggers).
+/// 
+/// This system handles special projectile behaviors like timed fuses,
+/// proximity triggers, and other logic that's not handled by the collision system.
+/// 
+/// # Arguments
+/// * `commands` - Bevy Commands for entity manipulation
+/// * `time` - Bevy FixedTime resource to get delta time
+/// * `explosion_events` - Message writer for explosion events
+/// * `projectiles` - Query for projectile entities and their components
+pub fn process_projectile_logic(
+    mut commands: Commands,
+    time: Res<Time<Fixed>>,
+    mut explosion_events: MessageWriter<ExplosionEvent>,
+    mut projectiles: Query<(Entity, &Transform, &mut ProjectileLogic, Option<&Payload>)>,
+) {
+    let dt = time.delta_secs();
+
+    for (entity, transform, mut logic, payload) in projectiles.iter_mut() {
+        match logic.as_mut() {
+            ProjectileLogic::Timed { fuse, elapsed } => {
+                *elapsed += dt;
+                if *elapsed >= *fuse {
+                    // Trigger explosion based on payload
+                    trigger_explosion(
+                        &mut commands,
+                        &mut explosion_events,
+                        entity,
+                        transform.translation,
+                        payload,
+                    );
+                }
+            }
+            ProjectileLogic::Proximity { range: _ } => {
+                // TODO: Query nearby entities and check distance
+                // For now, this is a placeholder
+            }
+            ProjectileLogic::Impact | ProjectileLogic::Sticky => {
+                // Handled by collision system
+            }
+        }
+    }
+}
+
+/// Trigger explosion based on payload type.
+fn trigger_explosion(
+    commands: &mut Commands,
+    explosion_events: &mut MessageWriter<ExplosionEvent>,
+    entity: Entity,
+    position: Vec3,
+    payload: Option<&Payload>,
+) {
+    // Send explosion event based on payload type
+    if let Some(payload) = payload {
+        match payload {
+            Payload::Explosive { damage, radius, falloff } => {
+                explosion_events.write(ExplosionEvent {
+                    center: position,
+                    radius: *radius,
+                    damage: *damage,
+                    falloff: *falloff,
+                    explosion_type: ExplosionType::HighExplosive,
+                    source: Some(entity),
+                });
+            }
+            Payload::Incendiary { duration: _, damage_per_second, radius } => {
+                explosion_events.write(ExplosionEvent {
+                    center: position,
+                    radius: *radius,
+                    damage: *damage_per_second,
+                    falloff: 1.0,
+                    explosion_type: ExplosionType::Incendiary,
+                    source: Some(entity),
+                });
+            }
+            Payload::Flash { intensity: _, duration: _, radius } => {
+                explosion_events.write(ExplosionEvent {
+                    center: position,
+                    radius: *radius,
+                    damage: 0.0,
+                    falloff: 1.0,
+                    explosion_type: ExplosionType::Flash,
+                    source: Some(entity),
+                });
+            }
+            Payload::Smoke { duration: _, radius } => {
+                explosion_events.write(ExplosionEvent {
+                    center: position,
+                    radius: *radius,
+                    damage: 0.0,
+                    falloff: 1.0,
+                    explosion_type: ExplosionType::Smoke,
+                    source: Some(entity),
+                });
+            }
+            Payload::Kinetic { .. } => {
+                // Kinetic payloads don't explode
+            }
+        }
+    }
+
+    // Despawn the projectile after explosion
+    commands.entity(entity).despawn();
+}
+
+/// Calculate explosion damage with distance falloff.
+/// 
+/// Computes the damage at a given distance from an explosion center,
+/// applying a power-based falloff function.
+/// 
+/// # Arguments
+/// * `base_damage` - The maximum damage at the explosion center
+/// * `distance` - The distance from the explosion center to the target
+/// * `radius` - The maximum radius of the explosion effect
+/// * `falloff` - The exponent controlling the rate of damage falloff
+/// 
+/// # Returns
+/// The damage value at the specified distance
+pub fn calculate_explosion_damage(
+    base_damage: f32,
+    distance: f32,
+    radius: f32,
+    falloff: f32,
+) -> f32 {
+    if distance >= radius {
+        return 0.0;
+    }
+
+    let normalized_distance = distance / radius;
+    let falloff_factor = (1.0 - normalized_distance).powf(falloff);
+
+    base_damage * falloff_factor
+}
+
+/// Grenade presets for common throwable types.
+pub mod presets {
+    use super::*;
+
+    /// Creates a fragmentation grenade preset.
+    /// 
+    /// This preset configures a timed explosive projectile with high damage
+    /// and a medium blast radius, typical of military fragmentation grenades.
+    /// 
+    /// # Returns
+    /// A tuple containing the ProjectileLogic and Payload for a frag grenade
+    pub fn frag_grenade() -> (ProjectileLogic, Payload) {
+        (
+            ProjectileLogic::Timed {
+                fuse: 3.0,
+                elapsed: 0.0,
+            },
+            Payload::Explosive {
+                damage: 150.0,
+                radius: 10.0,
+                falloff: 1.5,
+            },
+        )
+    }
+
+    /// Creates a flashbang grenade preset.
+    /// 
+    /// This preset configures a timed projectile that creates a blinding effect
+    /// with a large radius but no direct damage, used for tactical advantage.
+    /// 
+    /// # Returns
+    /// A tuple containing the ProjectileLogic and Payload for a flashbang
+    pub fn flashbang() -> (ProjectileLogic, Payload) {
+        (
+            ProjectileLogic::Timed {
+                fuse: 2.0,
+                elapsed: 0.0,
+            },
+            Payload::Flash {
+                intensity: 1.0,
+                duration: 5.0,
+                radius: 15.0,
+            },
+        )
+    }
+
+    /// Creates a smoke grenade preset.
+    /// 
+    /// This preset configures a timed projectile that creates a smoke screen
+    /// for concealment, with a medium duration and radius.
+    /// 
+    /// # Returns
+    /// A tuple containing the ProjectileLogic and Payload for a smoke grenade
+    pub fn smoke_grenade() -> (ProjectileLogic, Payload) {
+        (
+            ProjectileLogic::Timed {
+                fuse: 1.5,
+                elapsed: 0.0,
+            },
+            Payload::Smoke {
+                duration: 15.0,
+                radius: 8.0,
+            },
+        )
+    }
+
+    /// Creates a molotov cocktail preset.
+    /// 
+    /// This preset configures an impact-triggered projectile that creates
+    /// an incendiary effect with damage over time in a small area.
+    /// 
+    /// # Returns
+    /// A tuple containing the ProjectileLogic and Payload for a molotov
+    pub fn molotov() -> (ProjectileLogic, Payload) {
+        (
+            ProjectileLogic::Impact, // Breaks on impact
+            Payload::Incendiary {
+                duration: 8.0,
+                damage_per_second: 15.0,
+                radius: 5.0,
+            },
+        )
+    }
+
+    /// Creates a proximity mine preset.
+    /// 
+    /// This preset configures a proximity-triggered explosive device that
+    /// detonates when targets come within its detection range.
+    /// 
+    /// # Returns
+    /// A tuple containing the ProjectileLogic and Payload for a proximity mine
+    pub fn proximity_mine() -> (ProjectileLogic, Payload) {
+        (
+            ProjectileLogic::Proximity { range: 2.0 },
+            Payload::Explosive {
+                damage: 200.0,
+                radius: 5.0,
+                falloff: 2.0,
+            },
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_explosion_damage_at_center() {
+        let damage = calculate_explosion_damage(100.0, 0.0, 10.0, 1.0);
+        assert_eq!(damage, 100.0);
+    }
+
+    #[test]
+    fn test_explosion_damage_at_edge() {
+        let damage = calculate_explosion_damage(100.0, 10.0, 10.0, 1.0);
+        assert_eq!(damage, 0.0);
+    }
+
+    #[test]
+    fn test_explosion_damage_falloff() {
+        // Linear falloff (1.0)
+        let damage_half = calculate_explosion_damage(100.0, 5.0, 10.0, 1.0);
+        assert!((damage_half - 50.0).abs() < 0.01);
+
+        // Quadratic falloff (2.0) - less damage at same distance
+        let damage_quad = calculate_explosion_damage(100.0, 5.0, 10.0, 2.0);
+        assert!(damage_quad < damage_half);
+    }
+}
