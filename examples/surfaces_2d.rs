@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 use bevy_bullet_dynamics::prelude::*;
+use avian2d::prelude::*;
 
 const PLAYER_SPEED: f32 = 200.0;
 const BULLET_SPEED: f32 = 600.0;
@@ -9,6 +10,8 @@ const BULLET_SPEED: f32 = 600.0;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(PhysicsPlugins::default())
+        .add_plugins(PhysicsDebugPlugin::default())
         .add_plugins(BallisticsPluginGroup)
         .insert_resource(BallisticsEnvironment {
             gravity: Vec3::ZERO,
@@ -25,13 +28,14 @@ fn main() {
             enable_penetration: true,
             enable_ricochet: true,
             min_projectile_speed: 20.0,
-            debug_draw: false,
+            debug_draw: true,
         })
         .add_systems(Startup, setup)
         .add_systems(
             Update,
             (
                 player_movement,
+                player_location_rotation,
                 player_shooting,
                 handle_hits,
                 update_ui,
@@ -93,6 +97,10 @@ fn setup(mut commands: Commands) {
             },
             Player,
             Transform::from_xyz(0.0, 0.0, 0.0),
+            RigidBody::Dynamic,
+            Collider::rectangle(30.0, 30.0),
+            LockedAxes::ROTATION_LOCKED,
+            LinearVelocity::default(),
         ))
         .id();
 
@@ -123,7 +131,7 @@ fn setup(mut commands: Commands) {
             TextFont { font_size: 30.0, ..default() },
         ));
         parent.spawn((
-            Text::new("WASD: Move | SPACE: Shoot\n"),
+            Text::new("WASD: Move | Mouse: Aim | SPACE: Shoot\n"),
             TextFont { font_size: 20.0, ..default() },
             TextColor(Color::srgb(1.0, 1.0, 0.0)),
         ));
@@ -150,6 +158,8 @@ fn spawn_obstacles(commands: &mut Commands) {
         Obstacle,
         Transform::from_xyz(250.0, 100.0, 0.0),
         bevy_bullet_dynamics::systems::surface::materials::concrete(),
+        RigidBody::Static,
+        Collider::rectangle(200.0, 30.0),
     ));
 
     // Metal
@@ -162,6 +172,8 @@ fn spawn_obstacles(commands: &mut Commands) {
         Obstacle,
         Transform::from_xyz(-200.0, 150.0, 0.0),
         bevy_bullet_dynamics::systems::surface::materials::metal(),
+        RigidBody::Static,
+        Collider::rectangle(150.0, 20.0),
     ));
 
     // Wood
@@ -174,16 +186,17 @@ fn spawn_obstacles(commands: &mut Commands) {
         Obstacle,
         Transform::from_xyz(150.0, -100.0, 0.0),
         bevy_bullet_dynamics::systems::surface::materials::wood(),
+        RigidBody::Static,
+        Collider::rectangle(60.0, 60.0),
     ));
 }
 
 fn player_movement(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut player_query: Query<&mut Transform, With<Player>>,
-    time: Res<Time>,
+    mut player_query: Query<&mut LinearVelocity, With<Player>>,
 ) {
-    if let Some(mut player_transform) = player_query.iter_mut().next() {
-        let mut direction = Vec3::ZERO;
+    if let Some(mut velocity) = player_query.iter_mut().next() {
+        let mut direction = Vec2::ZERO;
 
         if keyboard_input.pressed(KeyCode::KeyW) {
             direction.y += 1.0;
@@ -198,9 +211,38 @@ fn player_movement(
             direction.x += 1.0;
         }
 
-        if direction != Vec3::ZERO {
+        if direction != Vec2::ZERO {
             direction = direction.normalize();
-            player_transform.translation += direction * PLAYER_SPEED * time.delta_secs();
+            velocity.0 = direction * PLAYER_SPEED;
+        } else {
+            velocity.0 = Vec2::ZERO;
+        }
+    }
+}
+
+fn player_location_rotation(
+    window_query: Query<&Window>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
+    mut player_query: Query<&mut Transform, With<Player>>,
+) {
+    let (camera, camera_transform) = match camera_query.single() {
+        Ok(v) => v,
+        Err(_) => return,
+    };
+    let window = match window_query.single() {
+        Ok(w) => w,
+        Err(_) => return,
+    };
+    let mut player_transform = match player_query.single_mut() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+
+    if let Some(cursor_position) = window.cursor_position() {
+        if let Ok(world_position) = camera.viewport_to_world_2d(camera_transform, cursor_position) {
+            let diff = world_position - player_transform.translation.xy();
+            let angle = diff.y.atan2(diff.x);
+            player_transform.rotation = Quat::from_rotation_z(angle);
         }
     }
 }
@@ -213,9 +255,9 @@ fn player_shooting(
     mut game_stats: ResMut<GameStats>,
     mut fire_events: MessageWriter<FireEvent>,
 ) {
-    if keyboard_input.just_pressed(KeyCode::Space) {
+    if keyboard_input.just_pressed(KeyCode::Space) || keyboard_input.just_pressed(KeyCode::KeyE) {
         if let Ok(player_transform) = player_query.get(player_entity.0) {
-            let direction = Vec3::X;
+            let direction = player_transform.rotation * Vec3::X;
             
             let spawn_params = ProjectileSpawnParams::new(
                 player_transform.translation + direction * 20.0,
@@ -232,21 +274,19 @@ fn player_shooting(
                     ..default()
                 },
                 Transform::from_translation(spawn_params.origin)
-                    .with_rotation(Quat::from_rotation_z(
-                        spawn_params.direction.y.atan2(spawn_params.direction.x),
-                    )),
+                    .with_rotation(player_transform.rotation),
                 Projectile::new(spawn_params.direction * spawn_params.velocity)
                     .with_owner(spawn_params.owner.unwrap())
                     .with_mass(0.008)
                     .with_drag(0.25),
-                Accuracy::default(),
+                bevy_bullet_dynamics::components::Accuracy::default(),
                 Payload::Kinetic {
                     damage: spawn_params.damage,
                 },
-                ProjectileLogic::Impact,
+                bevy_bullet_dynamics::components::ProjectileLogic::Impact,
             ));
 
-            fire_events.write(FireEvent::new(
+            fire_events.write(bevy_bullet_dynamics::events::FireEvent::new(
                 spawn_params.origin,
                 spawn_params.direction,
                 spawn_params.velocity,

@@ -121,10 +121,6 @@ use crate::resources::BallisticsConfig;
 #[cfg(any(feature = "dim3", feature = "dim2"))]
 use crate::systems::collision;
 
-#[cfg(feature = "dim3")]
-use avian3d::prelude::*;
-#[cfg(feature = "dim2")]
-use avian2d::prelude::*;
 
 /// Process hitscan projectiles (lasers, railguns).
 /// 
@@ -134,9 +130,10 @@ pub fn process_hitscan(
     mut commands: Commands,
     mut hit_events: MessageWriter<HitEvent>,
     config: Res<BallisticsConfig>,
-    spatial_query: SpatialQuery,
+    spatial_query: avian3d::prelude::SpatialQuery,
     projectiles: Query<(Entity, &Transform, &ProjectileLogic, Option<&Payload>)>,
 ) {
+    use avian3d::prelude::*;
     for (entity, transform, logic, payload) in projectiles.iter() {
         if let ProjectileLogic::Hitscan { range } = logic {
             let start = transform.translation;
@@ -180,9 +177,10 @@ pub fn process_hitscan_2d(
     mut commands: Commands,
     mut hit_events: MessageWriter<HitEvent>,
     config: Res<BallisticsConfig>,
-    spatial_query: SpatialQuery,
+    spatial_query: avian2d::prelude::SpatialQuery,
     projectiles: Query<(Entity, &Transform, &ProjectileLogic, Option<&Payload>)>,
 ) {
+    use avian2d::prelude::*;
     for (entity, transform, logic, payload) in projectiles.iter() {
         if let ProjectileLogic::Hitscan { range } = logic {
             let start = transform.translation.xy();

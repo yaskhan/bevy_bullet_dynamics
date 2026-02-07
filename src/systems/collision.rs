@@ -3,11 +3,6 @@
 use bevy::prelude::*;
 use bevy::ecs::message::MessageWriter;
 
-#[cfg(feature = "dim3")]
-use avian3d::prelude::*;
-#[cfg(feature = "dim2")]
-use avian2d::prelude::*;
-
 use crate::components::{Payload, Projectile, SurfaceMaterial};
 use crate::events::HitEvent;
 use crate::resources::BallisticsConfig;
@@ -29,11 +24,12 @@ use crate::systems::surface;
 pub fn handle_collisions(
     mut commands: Commands,
     config: Res<BallisticsConfig>,
-    spatial_query: SpatialQuery,
+    spatial_query: avian3d::prelude::SpatialQuery,
     mut hit_events: MessageWriter<HitEvent>,
     mut projectiles: Query<(Entity, &mut Transform, &mut Projectile, Option<&Payload>)>,
     surfaces: Query<&SurfaceMaterial>,
 ) {
+    use avian3d::prelude::*;
     for (entity, mut transform, mut projectile, payload) in projectiles.iter_mut() {
         let ray_origin = projectile.previous_position;
         let ray_end = transform.translation;
@@ -89,11 +85,12 @@ pub fn handle_collisions(
 pub fn handle_collisions_2d(
     mut commands: Commands,
     config: Res<BallisticsConfig>,
-    spatial_query: SpatialQuery,
+    spatial_query: avian2d::prelude::SpatialQuery,
     mut hit_events: MessageWriter<HitEvent>,
     mut projectiles: Query<(Entity, &mut Transform, &mut Projectile, Option<&Payload>)>,
     surfaces: Query<&SurfaceMaterial>,
 ) {
+    use avian2d::prelude::*;
     for (entity, mut transform, mut projectile, payload) in projectiles.iter_mut() {
         let ray_origin = projectile.previous_position.xy();
         let ray_end = transform.translation.xy();
