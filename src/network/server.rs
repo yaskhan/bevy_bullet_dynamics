@@ -9,8 +9,12 @@ pub struct BallisticsServerPlugin;
 
 impl Plugin for BallisticsServerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(RenetServerPlugin);
-        app.add_plugins(NetcodeServerPlugin);
+        if !app.is_plugin_added::<RenetServerPlugin>() {
+            app.add_plugins(RenetServerPlugin);
+        }
+        if !app.is_plugin_added::<NetcodeServerPlugin>() {
+            app.add_plugins(NetcodeServerPlugin);
+        }
         
         app.add_systems(Update, (
             server_update_system,
