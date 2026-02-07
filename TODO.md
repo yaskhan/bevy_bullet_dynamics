@@ -23,9 +23,10 @@
 ## 🟡 Средний приоритет
 
 ### Networking (feature: netcode)
-- [ ] Полная интеграция bevy_renet2
+- [x] Полная интеграция bevy_renet2 (structure setup)
 - [ ] Client-side prediction для projectiles
 - [ ] Server reconciliation
+
 - [ ] Lag compensation для hit detection
 - [ ] Синхронизация состояния оружия
 
