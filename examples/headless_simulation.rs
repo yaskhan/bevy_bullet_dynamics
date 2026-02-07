@@ -23,6 +23,7 @@ fn main() {
 struct TestTracker {
     start_pos: Vec3,
     expected_drop_min: f32,
+    has_checked_100m: bool,
 }
 
 fn setup_simulation(mut commands: Commands) {
@@ -33,7 +34,11 @@ fn setup_simulation(mut commands: Commands) {
     commands.spawn((
         Projectile::new(velocity),
         Transform::from_translation(Vec3::new(0.0, 10.0, 0.0)),
-        TestTracker { start_pos: Vec3::new(0.0, 10.0, 0.0), expected_drop_min: 0.05 },
+        TestTracker { 
+            start_pos: Vec3::new(0.0, 10.0, 0.0), 
+            expected_drop_min: 0.05,
+            has_checked_100m: false,
+        },
         Name::new("Test Bullet 800m/s"),
     ));
 
@@ -42,7 +47,11 @@ fn setup_simulation(mut commands: Commands) {
     commands.spawn((
         Projectile::new(velocity_sub),
         Transform::from_translation(Vec3::new(5.0, 10.0, 0.0)),
-        TestTracker { start_pos: Vec3::new(5.0, 10.0, 0.0), expected_drop_min: 0.2 },
+        TestTracker { 
+            start_pos: Vec3::new(5.0, 10.0, 0.0), 
+            expected_drop_min: 0.2,
+            has_checked_100m: false,
+        },
         Name::new("Subsonic Bullet 300m/s"),
     ));
     
@@ -66,17 +75,14 @@ fn print_progress(time: Res<Time>, mut timer: Local<f32>) {
 
 fn check_projectile_status(
     mut commands: Commands,
-    query: Query<(Entity, &Transform, &Projectile, &TestTracker, &Name)>,
-    _time: Res<Time>,
+    mut query: Query<(Entity, &Transform, &Projectile, &mut TestTracker, &Name)>,
 ) {
-    for (entity, transform, projectile, tracker, name) in query.iter() {
-        let dist = (transform.translation - tracker.start_pos).length(); // Total distance traveled approx
-        // Actually we want horizontal distance (Z)
+    for (entity, transform, projectile, mut tracker, name) in query.iter_mut() {
         let dist_z = (transform.translation.z - tracker.start_pos.z).abs();
         let drop = tracker.start_pos.y - transform.translation.y;
         
-        // Print status at 100m checkpoint
-        if dist_z >= 100.0 && dist_z <= 105.0 {
+        // Print status at 100m checkpoint (now handles fast projectiles by checking once after 100m)
+        if !tracker.has_checked_100m && dist_z >= 100.0 {
              println!("[CHECKPOINT] {} at {:.1}m: Drop = {:.4}m, Velocity = {:.1} m/s", 
                 name, dist_z, drop, projectile.velocity.length());
              
@@ -86,9 +92,7 @@ fn check_projectile_status(
                  println!("[FAIL] {} Drop check FAILED (Drop {:.4}m < Expected {:.4}m)", name, drop, tracker.expected_drop_min);
              }
              
-             // Mark as checked to avoid spamming? 
-             // Ideally we just despawn or remove tracker component.
-             commands.entity(entity).remove::<TestTracker>();
+             tracker.has_checked_100m = true;
         }
         
         if transform.translation.y < 0.0 {

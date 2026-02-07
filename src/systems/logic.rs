@@ -114,14 +114,17 @@ fn trigger_explosion(
     commands.entity(entity).despawn();
 }
 
+#[cfg(any(feature = "dim3", feature = "dim2"))]
+use crate::events::HitEvent;
+#[cfg(any(feature = "dim3", feature = "dim2"))]
+use crate::resources::BallisticsConfig;
+#[cfg(any(feature = "dim3", feature = "dim2"))]
+use crate::systems::collision;
+
 #[cfg(feature = "dim3")]
 use avian3d::prelude::*;
-#[cfg(feature = "dim3")]
-use crate::events::HitEvent;
-#[cfg(feature = "dim3")]
-use crate::resources::BallisticsConfig;
-#[cfg(feature = "dim3")]
-use crate::systems::collision;
+#[cfg(feature = "dim2")]
+use avian2d::prelude::*;
 
 /// Process hitscan projectiles (lasers, railguns).
 /// 
@@ -137,10 +140,7 @@ pub fn process_hitscan(
     for (entity, transform, logic, payload) in projectiles.iter() {
         if let ProjectileLogic::Hitscan { range } = logic {
             let start = transform.translation;
-            let direction = transform.forward(); // Assuming -Z is forward? No, usually Bevy forward is -Z. 
-            // Transform::forward() returns Dir3 (-Z).
-            
-            // Filter out self (though hitscan usually spawned fresh)
+            let direction = transform.forward(); 
             let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
 
             if let Some(hit) = spatial_query.cast_ray(
@@ -151,14 +151,6 @@ pub fn process_hitscan(
                 &filter,
             ) {
                 let hit_point = start + *direction * hit.distance;
-                // We need to fetch surface? process_hit expects it.
-                // We can try to query it? Or just pass None for now.
-                // Since we don't have access to Surfaces query here easily without adding it to params.
-                // Let's assume None for now or add the query.
-                
-                // Construct a dummy projectile component for process_hit
-                // process_hit uses it for previous_position (not relevant for hitscan) and drag (not relevant).
-                // But it takes &Projectile.
                 let dummy_projectile = crate::components::Projectile::default();
 
                 collision::process_hit(
@@ -171,11 +163,61 @@ pub fn process_hitscan(
                     hit.entity,
                     hit_point,
                     hit.normal,
-                    None, // No surface info for now
+                    None,
                 );
             }
 
-            // Hitscan is instant, despawn immediately
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+/// Process hitscan projectiles for 2D.
+#[cfg(feature = "dim2")]
+pub fn process_hitscan_2d(
+    mut commands: Commands,
+    mut hit_events: MessageWriter<HitEvent>,
+    config: Res<BallisticsConfig>,
+    spatial_query: SpatialQuery,
+    projectiles: Query<(Entity, &Transform, &ProjectileLogic, Option<&Payload>)>,
+) {
+    for (entity, transform, logic, payload) in projectiles.iter() {
+        if let ProjectileLogic::Hitscan { range } = logic {
+            let start = transform.translation.xy();
+            let direction = match Dir2::new(transform.up().xy()) { // In 2D, 'up' is often forward
+                Ok(dir) => dir,
+                Err(_) => continue,
+            };
+            
+            let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
+
+            if let Some(hit) = spatial_query.cast_ray(
+                start,
+                direction,
+                *range,
+                true,
+                &filter,
+            ) {
+                let hit_point = start + *direction * hit.distance;
+                let hit_point_3d = Vec3::new(hit_point.x, hit_point.y, transform.translation.z);
+                let hit_normal_3d = Vec3::new(hit.normal.x, hit.normal.y, 0.0);
+                
+                let dummy_projectile = crate::components::Projectile::default();
+
+                collision::process_hit(
+                    &mut commands,
+                    &mut hit_events,
+                    &config,
+                    entity,
+                    &dummy_projectile,
+                    payload,
+                    hit.entity,
+                    hit_point_3d,
+                    hit_normal_3d,
+                    None,
+                );
+            }
+
             commands.entity(entity).despawn();
         }
     }
@@ -338,7 +380,6 @@ pub fn apply_explosion_impulse(
     mut affected_entities: Query<(Entity, &Transform, &ExplosionAffected, &mut avian3d::prelude::LinearVelocity)>,
 ) {
     for event in explosion_events.read() {
-        // Base impulse strength (can be tuned per explosion type)
         let base_impulse = match event.explosion_type {
             crate::events::ExplosionType::HighExplosive => 30.0,
             crate::events::ExplosionType::Incendiary => 5.0,
@@ -354,7 +395,6 @@ pub fn apply_explosion_impulse(
         }
 
         for (entity, transform, affected, mut velocity) in affected_entities.iter_mut() {
-            // Skip if this entity is the explosion source
             if Some(entity) == event.source {
                 continue;
             }
@@ -362,32 +402,69 @@ pub fn apply_explosion_impulse(
             let to_entity = transform.translation - event.center;
             let distance = to_entity.length();
 
-            // Skip if outside blast radius
             if distance >= event.radius || distance < 0.01 {
                 continue;
             }
 
-            // Calculate impulse with distance falloff
             let direction = to_entity.normalize();
             let normalized_distance = distance / event.radius;
             let falloff_factor = (1.0 - normalized_distance).powf(event.falloff);
             
-            // Impulse inversely proportional to mass
             let mass_factor = if affected.mass > 0.0 { 1.0 / affected.mass } else { 1.0 };
             let impulse_magnitude = base_impulse * falloff_factor * mass_factor;
             
-            // Add upward component for more interesting physics
             let impulse_direction = (direction + Vec3::Y * 0.3).normalize();
             let impulse = impulse_direction * impulse_magnitude;
 
-            // Apply impulse to velocity
+            velocity.0 += impulse;
+        }
+    }
+}
+
+/// Apply physics impulse to nearby entities from explosions for 2D.
+#[cfg(feature = "dim2")]
+pub fn apply_explosion_impulse_2d(
+    mut explosion_events: MessageReader<ExplosionEvent>,
+    mut affected_entities: Query<(Entity, &Transform, &ExplosionAffected, &mut avian2d::prelude::LinearVelocity)>,
+) {
+    for event in explosion_events.read() {
+        let base_impulse = match event.explosion_type {
+            crate::events::ExplosionType::HighExplosive => 30.0,
+            _ => 5.0,
+        };
+
+        if base_impulse <= 0.0 {
+            continue;
+        }
+
+        for (entity, transform, affected, mut velocity) in affected_entities.iter_mut() {
+            if Some(entity) == event.source {
+                continue;
+            }
+
+            let to_entity = (transform.translation - event.center).xy();
+            let distance = to_entity.length();
+
+            if distance >= event.radius || distance < 0.01 {
+                continue;
+            }
+
+            let direction = to_entity.normalize();
+            let normalized_distance = distance / event.radius;
+            let falloff_factor = (1.0 - normalized_distance).powf(event.falloff);
+            
+            let mass_factor = if affected.mass > 0.0 { 1.0 / affected.mass } else { 1.0 };
+            let impulse_magnitude = base_impulse * falloff_factor * mass_factor;
+            
+            let impulse = direction * impulse_magnitude;
+
             velocity.0 += impulse;
         }
     }
 }
 
 /// Fallback when dim3 is not available
-#[cfg(not(feature = "dim3"))]
+#[cfg(not(any(feature = "dim3", feature = "dim2")))]
 pub fn apply_explosion_impulse(
     mut _explosion_events: MessageReader<ExplosionEvent>,
 ) {

@@ -129,16 +129,39 @@ impl Plugin for BallisticsCorePlugin {
                     systems::accuracy::update_bloom,
                     systems::kinematics::update_guidance,
                     systems::kinematics::update_projectiles_kinematics,
-                    systems::collision::handle_collisions,
                     systems::logic::process_projectile_logic,
-                    systems::logic::apply_explosion_impulse,
                 )
                     .chain(),
             );
-        
+
+        // 3D Physics Systems
         #[cfg(feature = "dim3")]
         {
-            app.add_systems(FixedUpdate, systems::logic::process_hitscan);
+            use avian3d::prelude::SpatialQueryPipeline;
+            app.add_systems(
+                FixedUpdate,
+                (
+                    systems::collision::handle_collisions,
+                    systems::logic::apply_explosion_impulse,
+                    systems::logic::process_hitscan,
+                )
+                    .run_if(resource_exists::<SpatialQueryPipeline>),
+            );
+        }
+
+        // 2D Physics Systems
+        #[cfg(feature = "dim2")]
+        {
+            use avian2d::prelude::SpatialQueryPipeline;
+            app.add_systems(
+                FixedUpdate,
+                (
+                    systems::collision::handle_collisions_2d,
+                    systems::logic::apply_explosion_impulse_2d,
+                    systems::logic::process_hitscan_2d,
+                )
+                    .run_if(resource_exists::<SpatialQueryPipeline>),
+            );
         }
     }
 }

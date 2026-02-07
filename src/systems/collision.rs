@@ -5,6 +5,8 @@ use bevy::ecs::message::MessageWriter;
 
 #[cfg(feature = "dim3")]
 use avian3d::prelude::*;
+#[cfg(feature = "dim2")]
+use avian2d::prelude::*;
 
 use crate::components::{Payload, Projectile, SurfaceMaterial};
 use crate::events::HitEvent;
@@ -37,13 +39,11 @@ pub fn handle_collisions(
         let ray_direction = ray_end - ray_origin;
         let ray_length = ray_direction.length();
 
-        // Skip if projectile hasn't moved enough
         if ray_length < 0.001 {
             projectile.previous_position = transform.translation;
             continue;
         }
 
-        // Normalize direction for raycast
         let direction = match Dir3::new(ray_direction.normalize()) {
             Ok(dir) => dir,
             Err(_) => {
@@ -52,16 +52,13 @@ pub fn handle_collisions(
             }
         };
 
-        // Create filter excluding the projectile itself
-        let filter = SpatialQueryFilter::default()
-            .with_excluded_entities([entity]);
+        let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
 
-        // Cast ray from previous to current position
         if let Some(hit) = spatial_query.cast_ray(
             ray_origin,
             direction,
             ray_length,
-            true, // solid
+            true,
             &filter,
         ) {
             let hit_point = ray_origin + *direction * hit.distance;
@@ -81,13 +78,70 @@ pub fn handle_collisions(
             );
         }
 
-        // Update previous position for next frame
         projectile.previous_position = transform.translation;
+    }
+}
 
-        // Debug visualization
-        if config.debug_draw {
-            // Would use gizmos here for debug drawing
+/// Handle collisions for 2D.
+#[cfg(feature = "dim2")]
+pub fn handle_collisions_2d(
+    mut commands: Commands,
+    config: Res<BallisticsConfig>,
+    spatial_query: SpatialQuery,
+    mut hit_events: MessageWriter<HitEvent>,
+    mut projectiles: Query<(Entity, &mut Transform, &mut Projectile, Option<&Payload>)>,
+    surfaces: Query<&SurfaceMaterial>,
+) {
+    for (entity, transform, mut projectile, payload) in projectiles.iter_mut() {
+        let ray_origin = projectile.previous_position.xy();
+        let ray_end = transform.translation.xy();
+        let ray_direction = ray_end - ray_origin;
+        let ray_length = ray_direction.length();
+
+        if ray_length < 0.001 {
+            projectile.previous_position = transform.translation;
+            continue;
         }
+
+        let direction = match Dir2::new(ray_direction.normalize()) {
+            Ok(dir) => dir,
+            Err(_) => {
+                projectile.previous_position = transform.translation;
+                continue;
+            }
+        };
+
+        let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
+
+        if let Some(hit) = spatial_query.cast_ray(
+            ray_origin,
+            direction,
+            ray_length,
+            true,
+            &filter,
+        ) {
+            let hit_point = ray_origin + *direction * hit.distance;
+            // Convert 2D hit point and normal back to 3D for process_hit
+            let hit_point_3d = Vec3::new(hit_point.x, hit_point.y, transform.translation.z);
+            let hit_normal_3d = Vec3::new(hit.normal.x, hit.normal.y, 0.0);
+            
+            let surface = surfaces.get(hit.entity).ok();
+
+            process_hit(
+                &mut commands,
+                &mut hit_events,
+                &config,
+                entity,
+                &projectile,
+                payload,
+                hit.entity,
+                hit_point_3d,
+                hit_normal_3d,
+                surface,
+            );
+        }
+
+        projectile.previous_position = transform.translation;
     }
 }
 
@@ -101,7 +155,7 @@ pub fn handle_collisions(
 /// * `config` - Ballistics configuration resource
 /// * `mut projectiles` - Query for projectile entities and their components
 /// * `_surfaces` - Query for surface material components (unused in this implementation)
-#[cfg(not(feature = "dim3"))]
+#[cfg(not(any(feature = "dim3", feature = "dim2")))]
 pub fn handle_collisions(
     _commands: Commands,
     config: Res<BallisticsConfig>,
