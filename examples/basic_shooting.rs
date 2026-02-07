@@ -180,6 +180,20 @@ impl WeaponType {
         }
         weapon
     }
+
+    /// Returns (mass, drag_coefficient, diameter, spin)
+    pub fn physical_properties(&self) -> (f32, f32, f32, f32) {
+        match self {
+            Self::Pistol => (0.008, 0.35, 0.009, 100.0),
+            Self::Rifle => (0.004, 0.25, 0.00556, 2500.0),
+            Self::Sniper => (0.010, 0.20, 0.00762, 3000.0),
+            Self::SMG => (0.008, 0.35, 0.009, 150.0),
+            Self::Shotgun => (0.003, 0.45, 0.008, 50.0), // Buckshot
+            Self::Launcher => (1.0, 0.8, 0.1, 0.0), // Missile
+            Self::Laser => (0.0, 0.0, 0.0, 0.0),
+            Self::Flamethrower => (0.05, 2.0, 0.1, 0.0),
+        }
+    }
 }
 
 fn handle_input(
@@ -300,12 +314,21 @@ fn handle_input(
             let final_direction = accuracy::apply_spread_to_direction(direction, spread_angle, seed);
 
             let velocity = final_direction * weapon_state.weapon_type.muzzle_velocity();
+            let (mass, drag, diameter, spin) = weapon_state.weapon_type.physical_properties();
             
             let mut entity_cmd = commands.spawn((
                 Mesh3d(projectile_mesh.clone()),
                 MeshMaterial3d(projectile_material.clone()),
                 Transform::from_translation(origin),
-                Projectile::new(velocity),
+                Projectile {
+                    velocity,
+                    mass,
+                    drag_coefficient: drag,
+                    diameter,
+                    spin,
+                    reference_area: std::f32::consts::PI * (diameter / 2.0).powi(2),
+                    ..default()
+                },
                 Payload::Kinetic { damage },
                 ProjectileLogic::Impact,
             ));
@@ -338,22 +361,20 @@ fn handle_input(
                     damage_per_second: 10.0,
                     duration: 3.0
                 });
-                // Increase drag manually?
-                // Projectile component has drag_coefficient.
-                // We'd need to modify the Projectile component on entity_cmd?
-                // But we spawn it with Projectile::new(velocity) which sets defaults.
-                // To set high drag, we must access it.
-                // Since `Projectile` is inserted in `spawn` tuple, we can overwrite it or modify it.
-                // Simplest is to overwrite:
+                
+                // Overwrite drag directly
                 entity_cmd.insert(Projectile {
                     velocity,
                     mass: 0.05,
-                    drag_coefficient: 2.0, // High drag
+                    drag_coefficient: 2.0,
                     reference_area: 0.05,
-                    ..default() 
+                    diameter: 0.1,
+                    spin: 0.0,
+                    ..default()
                 });
             }
-        }
+
+            }
 
         // Apply bloom
         accuracy::apply_shot_bloom(&mut weapon_state.accuracy);

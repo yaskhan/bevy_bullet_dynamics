@@ -37,6 +37,10 @@ pub struct Projectile {
     pub drag_coefficient: f32,
     /// Cross-sectional reference area (m²)
     pub reference_area: f32,
+    /// Projectile diameter (meters), used for spin drift
+    pub diameter: f32,
+    /// Angular velocity (spin) around flight axis (rad/s)
+    pub spin: f32,
     /// Penetration power (arbitrary units of energy)
     pub penetration_power: f32,
     /// Previous frame position for collision detection
@@ -65,6 +69,8 @@ impl Projectile {
             mass: 0.01,           // 10g bullet
             drag_coefficient: 0.3,
             reference_area: 0.0001, // ~1cm² cross-section
+            diameter: 0.01,
+            spin: 0.0,
             penetration_power: 100.0,
             previous_position: Vec3::ZERO,
             owner: None,

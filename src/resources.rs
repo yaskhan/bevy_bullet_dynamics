@@ -41,6 +41,8 @@ pub struct BallisticsEnvironment {
     pub temperature: f32,
     /// Altitude affecting air density (meters)
     pub altitude: f32,
+    /// Latitude in degrees (positive North, negative South)
+    pub latitude: f32,
 }
 
 impl Default for BallisticsEnvironment {
@@ -62,6 +64,7 @@ impl Default for BallisticsEnvironment {
             wind: Vec3::ZERO,
             temperature: 20.0,
             altitude: 0.0,
+            latitude: 45.0, // Default to 45 degrees North
         }
     }
 }
@@ -77,6 +80,7 @@ impl BallisticsEnvironment {
     pub fn new_2d() -> Self {
         Self {
             gravity: Vec3::new(0.0, -9.81, 0.0),
+            latitude: 0.0, // Equator for 2D? (irrelevant if Coriolis ignored in 2D)
             ..Default::default()
         }
     }
@@ -93,6 +97,38 @@ impl BallisticsEnvironment {
         let temp_kelvin = self.temperature + 273.15;
         let pressure_ratio = (-self.altitude / 8500.0).exp();
         self.air_density * pressure_ratio * (288.15 / temp_kelvin)
+    }
+
+    /// Calculate speed of sound in air based on temperature.
+    /// 
+    /// # Returns
+    /// Speed of sound in m/s
+    pub fn speed_of_sound(&self) -> f32 {
+        // Formula: c = 331.3 * sqrt(1 + T / 273.15)
+        331.3 * (1.0 + self.temperature / 273.15).sqrt()
+    }
+
+    /// Calculate Earth's angular velocity vector at the current latitude.
+    /// 
+    /// Assumes Z is North, X is East, Y is Up.
+    /// Earth rotates West to East (counter-clockwise looking from North celestial pole).
+    /// Vector points North (parallel to axis).
+    /// 
+    /// # Returns
+    /// Angular velocity vector (rad/s) in local frame
+    pub fn earth_angular_velocity(&self) -> Vec3 {
+        let omega = 7.2921159e-5; // Earth rotation rate (rad/s)
+        let lat_rad = self.latitude.to_radians();
+        
+        // In local frame (Z=North, Y=Up):
+        // Rotation vector is parallel to Earth axis.
+        // Axis is elevated by latitude angle from North horizon?
+        // At Equator (lat=0), axis is North (Horizontal). Vec3::Z.
+        // At Pole (lat=90), axis is Up (Vertical). Vec3::Y.
+        
+        // Vector = Omega * (cos(lat)*North + sin(lat)*Up)
+        // With Z=North, Y=Up:
+        Vec3::new(0.0, omega * lat_rad.sin(), omega * lat_rad.cos())
     }
 }
 
@@ -356,6 +392,8 @@ pub struct WeaponPreset {
     pub projectile_mass: f32,
     pub drag_coefficient: f32,
     pub base_damage: f32,
+    /// Spin rate in rad/s (positive = right-hand twist)
+    pub spin: f32,
     pub accuracy: crate::components::Accuracy,
 }
 
@@ -379,6 +417,7 @@ impl Default for WeaponPreset {
             projectile_mass: 0.01,
             drag_coefficient: 0.3,
             base_damage: 25.0,
+            spin: 0.0,
             accuracy: crate::components::Accuracy::default(),
         }
     }
@@ -405,6 +444,7 @@ impl WeaponPresets {
                     projectile_mass: 0.008,
                     drag_coefficient: 0.35,
                     base_damage: 20.0,
+                    spin: 150.0, // Low spin
                     accuracy: crate::components::Accuracy {
                         base_spread: 0.003,
                         bloom_per_shot: 0.015,
@@ -417,6 +457,7 @@ impl WeaponPresets {
                     projectile_mass: 0.004,
                     drag_coefficient: 0.25,
                     base_damage: 35.0,
+                    spin: 2500.0, // Standard rifle spin
                     accuracy: crate::components::Accuracy {
                         base_spread: 0.001,
                         bloom_per_shot: 0.02,
@@ -429,6 +470,7 @@ impl WeaponPresets {
                     projectile_mass: 0.01,
                     drag_coefficient: 0.2,
                     base_damage: 100.0,
+                    spin: 3000.0, // High spin for stability
                     accuracy: crate::components::Accuracy {
                         base_spread: 0.0005,
                         bloom_per_shot: 0.03,
@@ -442,6 +484,7 @@ impl WeaponPresets {
                     projectile_mass: 0.03,
                     drag_coefficient: 0.5,
                     base_damage: 45.0,
+                    spin: 50.0, // Arrow rotation
                     accuracy: crate::components::Accuracy {
                         base_spread: 0.002,
                         bloom_per_shot: 0.0,
