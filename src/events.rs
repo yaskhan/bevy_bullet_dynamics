@@ -46,6 +46,10 @@ pub struct FireEvent {
     pub weapon_type: usize,
     /// Server timestamp (for client-server reconciliation)
     pub timestamp: f64,
+    /// Number of projectiles to spawn (e.g., for shotguns)
+    pub projectile_count: u32,
+    /// Spread angle for multiple projectiles (in radians)
+    pub spread_angle: f32,
 }
 
 impl Default for FireEvent {
@@ -71,6 +75,8 @@ impl Default for FireEvent {
             spread_seed: 0,
             weapon_type: 0,
             timestamp: 0.0,
+            projectile_count: 1,
+            spread_angle: 0.0,
         }
     }
 }
@@ -92,6 +98,8 @@ impl FireEvent {
             origin,
             direction: direction.normalize(),
             muzzle_velocity,
+            projectile_count: 1,
+            spread_angle: 0.0,
             ..Default::default()
         }
     }
@@ -117,6 +125,18 @@ impl FireEvent {
     /// The modified FireEvent instance for method chaining
     pub fn with_seed(mut self, seed: u64) -> Self {
         self.spread_seed = seed;
+        self
+    }
+
+    /// Sets the number of projectiles to spawn (e.g., for shotguns).
+    pub fn with_projectile_count(mut self, count: u32) -> Self {
+        self.projectile_count = count;
+        self
+    }
+
+    /// Sets the spread angle for multiple projectiles.
+    pub fn with_spread_angle(mut self, angle: f32) -> Self {
+        self.spread_angle = angle;
         self
     }
 }

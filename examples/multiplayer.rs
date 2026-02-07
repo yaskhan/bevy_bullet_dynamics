@@ -111,6 +111,8 @@ fn handle_input(
                 weapon_type: 0,
                 spread_seed: rand::random(),
                 timestamp: time.elapsed_secs_f64(),
+                projectile_count: 1,
+                spread_angle: 0.0,
             });
 
             println!(

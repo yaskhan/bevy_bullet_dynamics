@@ -111,6 +111,7 @@ enum WeaponType {
     Rifle,
     Sniper,
     SMG,
+    Shotgun,
 }
 
 impl WeaponType {
@@ -120,6 +121,7 @@ impl WeaponType {
             Self::Rifle => "Rifle",
             Self::Sniper => "Sniper",
             Self::SMG => "SMG",
+            Self::Shotgun => "Shotgun",
         }
     }
 
@@ -129,6 +131,7 @@ impl WeaponType {
             Self::Rifle => 900.0,
             Self::Sniper => 1200.0,
             Self::SMG => 400.0,
+            Self::Shotgun => 350.0,
         }
     }
 
@@ -139,6 +142,7 @@ impl WeaponType {
             Self::Rifle => presets::rifle(),
             Self::Sniper => presets::sniper(),
             Self::SMG => presets::smg(),
+            Self::Shotgun => presets::shotgun(),
         }
     }
 }
@@ -165,8 +169,11 @@ fn handle_input(
         weapon_state.accuracy = WeaponType::Sniper.accuracy();
     }
     if keyboard.just_pressed(KeyCode::Digit4) {
-        weapon_state.weapon_type = WeaponType::SMG;
         weapon_state.accuracy = WeaponType::SMG.accuracy();
+    }
+    if keyboard.just_pressed(KeyCode::Digit5) {
+        weapon_state.weapon_type = WeaponType::Shotgun;
+        weapon_state.accuracy = WeaponType::Shotgun.accuracy();
     }
 
     // Fire
@@ -189,12 +196,7 @@ fn handle_input(
             5.0,
         );
 
-        let seed = rand::random::<u64>();
-        let final_direction = accuracy::apply_spread_to_direction(direction, spread_angle, seed);
-
-        let velocity = final_direction * weapon_state.weapon_type.muzzle_velocity();
-
-        // Spawn projectile
+        // Create projectile assets
         let projectile_mesh = meshes.add(Sphere::new(0.05));
         let projectile_material = materials.add(StandardMaterial {
             base_color: Color::srgb(1.0, 0.8, 0.2),
@@ -202,14 +204,27 @@ fn handle_input(
             ..default()
         });
 
-        commands.spawn((
-            Mesh3d(projectile_mesh),
-            MeshMaterial3d(projectile_material),
-            Transform::from_translation(origin),
-            Projectile::new(velocity),
-            Payload::Kinetic { damage: 25.0 },
-            ProjectileLogic::Impact,
-        ));
+        // Determine projectile count and damage
+        let (projectile_count, damage) = match weapon_state.weapon_type {
+            WeaponType::Shotgun => (8, 5.0),
+            _ => (1, 25.0),
+        };
+
+        for i in 0..projectile_count {
+            let seed = rand::random::<u64>().wrapping_add(i as u64);
+            let final_direction = accuracy::apply_spread_to_direction(direction, spread_angle, seed);
+
+            let velocity = final_direction * weapon_state.weapon_type.muzzle_velocity();
+
+            commands.spawn((
+                Mesh3d(projectile_mesh.clone()),
+                MeshMaterial3d(projectile_material.clone()),
+                Transform::from_translation(origin),
+                Projectile::new(velocity),
+                Payload::Kinetic { damage },
+                ProjectileLogic::Impact,
+            ));
+        }
 
         // Apply bloom
         accuracy::apply_shot_bloom(&mut weapon_state.accuracy);
@@ -223,7 +238,7 @@ fn update_ui(
     if weapon_state.is_changed() {
         for mut text in ui_text.iter_mut() {
             text.0 = format!(
-                "Press SPACE to shoot\nPress 1-4 for weapon types\nCurrent: {}\nBloom: {:.3}",
+                "Press SPACE to shoot\nPress 1-5 for weapon types\nCurrent: {}\nBloom: {:.3}",
                 weapon_state.weapon_type.name(),
                 weapon_state.accuracy.current_bloom
             );

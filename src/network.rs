@@ -85,6 +85,10 @@ pub struct FireCommand {
     pub spread_seed: u64,
     /// Client timestamp
     pub timestamp: f64,
+    /// Number of projectiles to spawn
+    pub projectile_count: u32,
+    /// Spread angle in radians
+    pub spread_angle: f32,
 }
 
 /// Server-to-client hit confirmation.
@@ -142,19 +146,36 @@ fn process_fire_commands(
             continue;
         }
 
-        // Spawn server-authoritative projectile
+        // Spawn server-authoritative projectiles
         // This would use weapon presets to get projectile parameters
-        let velocity = cmd.direction.normalize() * 400.0; // Default velocity
+        let base_velocity = 400.0; // Default velocity
 
-        commands.spawn((
-            Transform::from_translation(cmd.origin),
-            Projectile::new(velocity),
-            NetProjectile {
-                owner_id: cmd.player_id,
-                timestamp: cmd.timestamp,
-                spread_seed: cmd.spread_seed,
-            },
-        ));
+        for i in 0..cmd.projectile_count {
+            // Apply spread if needed
+            let final_direction = if cmd.spread_angle > 0.0 {
+                // Use a derived seed for each projectile to ensure determinism
+                let projectile_seed = cmd.spread_seed.wrapping_add(i as u64);
+                crate::systems::accuracy::apply_spread_to_direction(
+                    cmd.direction,
+                    cmd.spread_angle,
+                    projectile_seed
+                )
+            } else {
+                cmd.direction
+            };
+
+            let velocity = final_direction * base_velocity;
+
+            commands.spawn((
+                Transform::from_translation(cmd.origin),
+                Projectile::new(velocity),
+                NetProjectile {
+                    owner_id: cmd.player_id,
+                    timestamp: cmd.timestamp,
+                    spread_seed: cmd.spread_seed.wrapping_add(i as u64),
+                },
+            ));
+        }
     }
 }
 
