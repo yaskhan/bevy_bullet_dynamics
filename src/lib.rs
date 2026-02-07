@@ -81,6 +81,7 @@ impl PluginGroup for BallisticsPluginGroup {
             .add(BallisticsCorePlugin)
             .add(BallisticsSurfacePlugin)
             .add(BallisticsVfxPlugin)
+            .add(BallisticsDebugPlugin)
     }
 }
 
@@ -205,3 +206,13 @@ impl Plugin for BallisticsVfxPlugin {
             );
     }
 }
+
+/// Debug plugin for ballistics visualization.
+pub struct BallisticsDebugPlugin;
+
+impl Plugin for BallisticsDebugPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, systems::debug::draw_projectile_debug);
+    }
+}
+

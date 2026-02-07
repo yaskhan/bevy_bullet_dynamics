@@ -51,10 +51,11 @@
 - [ ] 3D позиционирование звука
 
 ### UI/Debug
-- [ ] Debug visualization для траекторий
-- [ ] HUD с информацией об оружии
-- [ ] Zeroing interface
+- [x] Debug visualization для траекторий
+- [x] HUD с информацией об оружии (Zeroing info)
+- [x] Zeroing interface (PageUp/PageDown)
 - [ ] Rangefinder
+
 
 ### Оптимизация
 - [ ] Benchmark профилирование

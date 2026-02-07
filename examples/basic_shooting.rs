@@ -91,6 +91,7 @@ fn setup(
         weapon_type: WeaponType::Rifle,
         accuracy: bevy_bullet_dynamics::systems::accuracy::presets::rifle(),
         weapon: WeaponType::Rifle.weapon_config(),
+        sight: Sight::default(),
     });
 }
 
@@ -105,6 +106,7 @@ struct WeaponState {
     weapon_type: WeaponType,
     accuracy: Accuracy,
     weapon: Weapon,
+    sight: Sight,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -241,6 +243,20 @@ fn handle_input(
         changed = true;
     }
 
+    // Zeroing adjustment
+    if keyboard.just_pressed(KeyCode::PageUp) {
+        let current = weapon_state.sight.current_zero;
+        if let Some(next) = weapon_state.sight.zero_presets.iter().find(|&&z| z > current) {
+            weapon_state.sight.current_zero = *next;
+        }
+    }
+    if keyboard.just_pressed(KeyCode::PageDown) {
+        let current = weapon_state.sight.current_zero;
+        if let Some(prev) = weapon_state.sight.zero_presets.iter().rev().find(|&&z| z < current) {
+            weapon_state.sight.current_zero = *prev;
+        }
+    }
+
     if changed {
         weapon_state.accuracy = weapon_state.weapon_type.accuracy();
         weapon_state.weapon = weapon_state.weapon_type.weapon_config();
@@ -313,8 +329,37 @@ fn handle_input(
             let seed = rand::random::<u64>().wrapping_add(i as u64);
             let final_direction = accuracy::apply_spread_to_direction(direction, spread_angle, seed);
 
-            let velocity = final_direction * weapon_state.weapon_type.muzzle_velocity();
             let (mass, drag, diameter, spin) = weapon_state.weapon_type.physical_properties();
+            let velocity_mag = weapon_state.weapon_type.muzzle_velocity();
+            
+            // Calculate elevation angle for zero distance
+            // Simplified ballistic arc approximation:
+            // theta = 0.5 * asin(g * x / v^2)
+            // But with drag it's harder.
+            // For now use simple gravity drop compensation.
+            // drop = 0.5 * g * t^2
+            // t = dist / v
+            // angle ~ drop / dist
+            let zero_dist = weapon_state.sight.current_zero;
+            let gravity = 9.81f32;
+            let time_to_target = zero_dist / velocity_mag;
+            let drop = 0.5 * gravity * time_to_target * time_to_target;
+            let elevation_angle = (drop / zero_dist).atan(); // Rough approximation
+
+            // Apply elevation to direction (rotate around Right vector)
+            // Assuming direction is primarily -Z. Right is +X.
+            // We rotate UP (towards +Y).
+            let elevation_rot = Quat::from_rotation_x(elevation_angle);
+            // Wait, if forward is -Z. Right is +X.
+            // Rotation AROUND +X by theta (right hand rule) -> Y goes to +Z (down)?
+            // We want Y to go UP. So rotate positive X gives +Y -> +Z(back).
+            // We want to pitch UP. Nose (-Z) goes to +Y.
+            // Rotate around +X by +theta -> Y->Z. Mmm.
+            // Basic pitch:
+            // global X axis.
+            let elevated_direction = elevation_rot * final_direction;
+             
+            let velocity = elevated_direction * velocity_mag;
             
             let mut entity_cmd = commands.spawn((
                 Mesh3d(projectile_mesh.clone()),
@@ -388,9 +433,10 @@ fn update_ui(
     if weapon_state.is_changed() {
         for mut text in ui_text.iter_mut() {
             text.0 = format!(
-                "Press SPACE to shoot\nPress 1-5 for weapon types\nCurrent: {}\nBloom: {:.3}",
+                "Press SPACE to shoot\nPress 1-5 for weapon types\nCurrent: {}\nBloom: {:.3}\nArgs: Zero: {:.0}m (PgUp/Dn)",
                 weapon_state.weapon_type.name(),
-                weapon_state.accuracy.current_bloom
+                weapon_state.accuracy.current_bloom,
+                weapon_state.sight.current_zero
             );
         }
     }

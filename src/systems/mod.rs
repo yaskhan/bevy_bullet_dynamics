@@ -6,3 +6,4 @@ pub mod kinematics;
 pub mod logic;
 pub mod surface;
 pub mod vfx;
+pub mod debug;

@@ -299,6 +299,28 @@ pub enum Payload {
     },
 }
 
+#[derive(Component, Reflect, Clone)]
+#[reflect(Component)]
+pub struct Sight {
+    /// Height of the sight above the bore axis (meters)
+    pub height_over_bore: f32,
+    /// Current zero distance (meters)
+    pub current_zero: f32,
+    /// Available zero presets (meters)
+    pub zero_presets: Vec<f32>,
+}
+
+impl Default for Sight {
+    fn default() -> Self {
+        Self {
+            height_over_bore: 0.05, // 5cm
+            current_zero: 100.0,    // 100m default
+            zero_presets: vec![50.0, 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 800.0, 1000.0],
+        }
+    }
+}
+
+
 impl Default for Payload {
     /// Creates a default Payload instance with Kinetic damage.
     /// 
