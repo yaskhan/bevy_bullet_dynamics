@@ -47,20 +47,44 @@ pub fn update_tracers(
 pub fn spawn_impact_effects(
     mut commands: Commands,
     mut hit_events: MessageReader<HitEvent>,
-    // Asset handles would go here for actual VFX
+    ballistics_assets: Res<crate::resources::BallisticsAssets>,
+    mut pool: ResMut<DecalPool>,
 ) {
     for event in hit_events.read() {
-        // Spawn appropriate effect based on hit type
-        // This is a placeholder - actual implementation would spawn particles/meshes
-
         let effect_type = HitEffectType::Sparks; // Would come from surface material
+        let rotation = Quat::from_rotation_arc(Vec3::Y, event.normal);
 
-        spawn_hit_effect(
-            &mut commands,
-            event.impact_point,
-            event.normal,
-            effect_type,
-        );
+        let material = match effect_type {
+            HitEffectType::Sparks => ballistics_assets.spark_material.clone(),
+            HitEffectType::Dust => ballistics_assets.dust_material.clone(),
+            HitEffectType::Blood => ballistics_assets.blood_material.clone(),
+            _ => ballistics_assets.spark_material.clone(),
+        };
+
+        let position = event.impact_point + event.normal * 0.01;
+        let scale = Vec3::splat(0.05);
+
+        if let Some(entity) = pool.get() {
+            commands.entity(entity).insert((
+                Mesh3d(ballistics_assets.sphere_mesh.clone()),
+                MeshMaterial3d(material),
+                Transform::from_translation(position)
+                    .with_rotation(rotation)
+                    .with_scale(scale),
+                Visibility::Visible,
+                ImpactDecal { lifetime: 0.5 },
+            ));
+        } else {
+            commands.spawn((
+                Mesh3d(ballistics_assets.sphere_mesh.clone()),
+                MeshMaterial3d(material),
+                Transform::from_translation(position)
+                    .with_rotation(rotation)
+                    .with_scale(scale),
+                Visibility::Visible,
+                ImpactDecal { lifetime: 0.5 },
+            ));
+        }
     }
 }
 
@@ -92,93 +116,6 @@ pub fn cleanup_expired_effects(
     }
 }
 
-/// Spawn a hit effect at the impact location.
-/// 
-/// This function spawns a visual effect at the specified location based on the
-/// type of hit effect requested.
-/// 
-/// # Arguments
-/// * `commands` - Bevy Commands for spawning entities
-/// * `meshes` - Asset storage for meshes
-/// * `materials` - Asset storage for materials
-/// * `position` - World-space position where the effect should appear
-/// * `normal` - Surface normal vector for orienting the effect
-/// * `effect_type` - Type of visual effect to spawn
-pub fn spawn_hit_effect_with_assets(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    position: Vec3,
-    normal: Vec3,
-    effect_type: HitEffectType,
-) {
-    let rotation = Quat::from_rotation_arc(Vec3::Y, normal);
-    
-    // Create effect based on type
-    let (color, emissive, size) = match effect_type {
-        HitEffectType::Sparks => (
-            Color::srgb(1.0, 0.7, 0.2),
-            LinearRgba::rgb(5.0, 3.0, 0.5),
-            0.05,
-        ),
-        HitEffectType::Dust => (
-            Color::srgba(0.6, 0.5, 0.4, 0.8),
-            LinearRgba::NONE,
-            0.15,
-        ),
-        HitEffectType::Blood => (
-            Color::srgb(0.5, 0.0, 0.0),
-            LinearRgba::rgb(0.3, 0.0, 0.0),
-            0.1,
-        ),
-        HitEffectType::WoodChips => (
-            Color::srgb(0.6, 0.4, 0.2),
-            LinearRgba::NONE,
-            0.08,
-        ),
-        HitEffectType::Water => (
-            Color::srgba(0.4, 0.6, 0.9, 0.6),
-            LinearRgba::rgb(0.2, 0.3, 0.5),
-            0.12,
-        ),
-        HitEffectType::Glass => (
-            Color::srgba(0.9, 0.95, 1.0, 0.5),
-            LinearRgba::rgb(0.5, 0.6, 0.8),
-            0.06,
-        ),
-    };
-
-    // Spawn impact effect sphere
-    let mesh = meshes.add(Sphere::new(size));
-    let material = materials.add(StandardMaterial {
-        base_color: color,
-        emissive,
-        alpha_mode: if color.alpha() < 1.0 { 
-            AlphaMode::Blend 
-        } else { 
-            AlphaMode::Opaque 
-        },
-        ..default()
-    });
-
-    commands.spawn((
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
-        Transform::from_translation(position + normal * 0.01)
-            .with_rotation(rotation),
-        ImpactDecal { lifetime: 0.5 }, // Short-lived effect
-    ));
-}
-
-/// Simple spawn_hit_effect for use without asset access (placeholder).
-fn spawn_hit_effect(
-    _commands: &mut Commands,
-    _position: Vec3,
-    _normal: Vec3,
-    _effect_type: HitEffectType,
-) {
-    // Placeholder - use spawn_hit_effect_with_assets for real effects
-}
 
 /// Spawn a bullet tracer with actual mesh from pool or create new.
 /// 
@@ -198,8 +135,7 @@ fn spawn_hit_effect(
 /// The Entity ID of the spawned tracer
 pub fn spawn_tracer_with_assets(
     commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    ballistics_assets: &Res<crate::resources::BallisticsAssets>,
     pool: &mut TracerPool,
     origin: Vec3,
     direction: Vec3,
@@ -208,23 +144,11 @@ pub fn spawn_tracer_with_assets(
 ) -> Entity {
     let lifetime = settings.length / speed * 10.0;
     
-    // Create stretched cylinder mesh for tracer
-    let mesh = meshes.add(Cylinder::new(settings.width, settings.length));
-    
-    // Create glowing material
-    let emissive_strength = settings.glow_intensity * 3.0;
-    let material = materials.add(StandardMaterial {
-        base_color: settings.color,
-        emissive: LinearRgba::from(settings.color) * emissive_strength,
-        unlit: true, // Tracers should glow
-        ..default()
-    });
-
     if let Some(entity) = pool.get() {
         // Reuse pooled tracer
         commands.entity(entity).insert((
-            Mesh3d(mesh),
-            MeshMaterial3d(material),
+            Mesh3d(ballistics_assets.tracer_mesh.clone()),
+            MeshMaterial3d(ballistics_assets.spark_material.clone()), // Use generic for now
             Transform::from_translation(origin).looking_to(direction, Vec3::Y),
             Visibility::Visible,
             BulletTracer {
@@ -237,8 +161,8 @@ pub fn spawn_tracer_with_assets(
         // Create new tracer
         commands
             .spawn((
-                Mesh3d(mesh),
-                MeshMaterial3d(material),
+                Mesh3d(ballistics_assets.tracer_mesh.clone()),
+                MeshMaterial3d(ballistics_assets.spark_material.clone()),
                 Transform::from_translation(origin).looking_to(direction, Vec3::Y),
                 Visibility::Visible,
                 BulletTracer {
@@ -484,26 +408,17 @@ pub fn update_muzzle_flash(
 /// Creates a glowing sphere effect at the muzzle position.
 pub fn spawn_muzzle_flash(
     commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
+    ballistics_assets: &Res<crate::resources::BallisticsAssets>,
     position: Vec3,
     direction: Vec3,
     intensity: f32,
     scale: f32,
 ) -> Entity {
-    let mesh = meshes.add(Sphere::new(scale));
-    let material = materials.add(StandardMaterial {
-        base_color: Color::srgb(1.0, 0.9, 0.5),
-        emissive: LinearRgba::rgb(intensity * 5.0, intensity * 4.0, intensity * 1.0),
-        unlit: true,
-        ..default()
-    });
-
     let rotation = Quat::from_rotation_arc(Vec3::Z, direction);
 
     commands.spawn((
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
+        Mesh3d(ballistics_assets.sphere_mesh.clone()),
+        MeshMaterial3d(ballistics_assets.flash_material.clone()),
         Transform::from_translation(position)
             .with_rotation(rotation)
             .with_scale(Vec3::splat(scale)),
@@ -546,65 +461,31 @@ pub fn update_explosion_vfx(
 /// Spawn explosion visual effect from explosion event.
 pub fn spawn_explosion_vfx_from_event(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut explosion_events: MessageReader<ExplosionEvent>,
+    ballistics_assets: Res<crate::resources::BallisticsAssets>,
 ) {
     for event in explosion_events.read() {
-        let (color, size_mult, lifetime, emissive_mult) = match event.explosion_type {
-            crate::events::ExplosionType::HighExplosive => (Color::srgb(1.0, 0.5, 0.0), 1.0, 0.5, 5.0),
-            crate::events::ExplosionType::Incendiary => (Color::srgb(1.0, 0.2, 0.0), 1.0, 2.0, 2.0),
-            crate::events::ExplosionType::Flash => (Color::WHITE, 2.0, 0.1, 20.0),
-            crate::events::ExplosionType::Smoke => (Color::srgb(0.5, 0.5, 0.5), 1.5, 5.0, 0.0),
-            _ => (Color::srgb(1.0, 1.0, 0.0), 1.0, 1.0, 1.0),
+        let (size_mult, lifetime) = match event.explosion_type {
+            crate::events::ExplosionType::HighExplosive => (1.0, 0.5),
+            crate::events::ExplosionType::Incendiary => (1.0, 2.0),
+            crate::events::ExplosionType::Flash => (2.0, 0.1),
+            crate::events::ExplosionType::Smoke => (1.5, 5.0),
+            _ => (1.0, 1.0),
         };
-
-        spawn_explosion_vfx_typed(
-            &mut commands,
-            &mut meshes,
-            &mut materials,
-            event.center,
-            event.radius * size_mult,
-            10.0 * emissive_mult,
-            color,
-            lifetime,
-        );
+ 
+        commands.spawn((
+            Mesh3d(ballistics_assets.sphere_mesh.clone()),
+            MeshMaterial3d(ballistics_assets.explosion_material.clone()),
+            Transform::from_translation(event.center)
+                .with_scale(Vec3::splat(0.1)), // Start small
+            ExplosionVFX {
+                lifetime,
+                max_radius: event.radius * size_mult,
+                current_radius: 0.1,
+                intensity: 10.0,
+            },
+        ));
     }
 }
 
-/// Spawn explosion visual effect at position with custom props.
-pub fn spawn_explosion_vfx_typed(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    position: Vec3,
-    radius: f32,
-    intensity: f32,
-    color: Color,
-    lifetime: f32,
-) -> Entity {
-    let mesh = meshes.add(Sphere::new(1.0));
-    
-    // Create fiery material
-    let material = materials.add(StandardMaterial {
-        base_color: color,
-        emissive: LinearRgba::from(color) * intensity,
-        alpha_mode: AlphaMode::Blend,
-        unlit: true,
-        ..default()
-    });
-
-    commands.spawn((
-        Mesh3d(mesh),
-        MeshMaterial3d(material),
-        Transform::from_translation(position)
-            .with_scale(Vec3::splat(0.1)), // Start small
-        ExplosionVFX {
-            lifetime,
-            max_radius: radius,
-            current_radius: 0.1,
-            intensity,
-        },
-    )).id()
-}
 

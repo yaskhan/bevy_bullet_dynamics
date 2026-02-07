@@ -226,12 +226,21 @@ impl Default for BallisticsConfig {
 ///     // Pool is empty, create a new tracer
 /// }
 /// ```
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct TracerPool {
     /// Available (inactive) tracer entities
     pub available: Vec<Entity>,
     /// Maximum pool size
     pub max_size: usize,
+}
+
+impl Default for TracerPool {
+    fn default() -> Self {
+        Self {
+            available: Vec::with_capacity(256),
+            max_size: 256,
+        }
+    }
 }
 
 impl TracerPool {
@@ -295,12 +304,21 @@ impl TracerPool {
 ///     // Pool is empty, create a new decal
 /// }
 /// ```
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct DecalPool {
     /// Available (inactive) decal entities
     pub available: Vec<Entity>,
     /// Maximum pool size
     pub max_size: usize,
+}
+
+impl Default for DecalPool {
+    fn default() -> Self {
+        Self {
+            available: Vec::with_capacity(256),
+            max_size: 256,
+        }
+    }
 }
 
 impl DecalPool {
@@ -500,4 +518,23 @@ impl WeaponPresets {
             ],
         }
     }
+}
+
+/// Resource for caching common ballistics assets to prevent memory leaks.
+#[derive(Resource, Default)]
+pub struct BallisticsAssets {
+    /// Generic sphere mesh for muzzle flashes and hit effects
+    pub sphere_mesh: Handle<Mesh>,
+    /// Generic cylinder mesh for tracers
+    pub tracer_mesh: Handle<Mesh>,
+    /// Material for metallic sparks
+    pub spark_material: Handle<StandardMaterial>,
+    /// Material for dust effects
+    pub dust_material: Handle<StandardMaterial>,
+    /// Material for blood effects
+    pub blood_material: Handle<StandardMaterial>,
+    /// Material for muzzle flashes
+    pub flash_material: Handle<StandardMaterial>,
+    /// Material for explosions
+    pub explosion_material: Handle<StandardMaterial>,
 }
