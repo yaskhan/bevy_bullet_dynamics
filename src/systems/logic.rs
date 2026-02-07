@@ -114,6 +114,22 @@ fn trigger_explosion(
     commands.entity(entity).despawn();
 }
 
+/// Cleanup projectiles that have exceeded their lifetime or distance limits.
+pub fn cleanup_expired_projectiles(
+    mut commands: Commands,
+    config: Res<BallisticsConfig>,
+    projectiles: Query<(Entity, &crate::components::Projectile)>,
+) {
+    for (entity, projectile) in projectiles.iter() {
+        if projectile.age >= config.max_projectile_lifetime
+            || projectile.distance_travelled >= config.max_projectile_distance
+            || (projectile.velocity.length() < config.min_projectile_speed && projectile.age > 0.1)
+        {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
 #[cfg(any(feature = "dim3", feature = "dim2"))]
 use crate::events::HitEvent;
 #[cfg(any(feature = "dim3", feature = "dim2"))]

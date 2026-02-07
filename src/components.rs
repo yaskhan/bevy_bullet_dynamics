@@ -45,6 +45,10 @@ pub struct Projectile {
     pub penetration_power: f32,
     /// Previous frame position for collision detection
     pub previous_position: Vec3,
+    /// Time since spawn (seconds)
+    pub age: f32,
+    /// Total distance travelled (meters)
+    pub distance_travelled: f32,
     /// Owner entity (for multiplayer hit detection)
     pub owner: Option<Entity>,
 }
@@ -73,6 +77,8 @@ impl Projectile {
             spin: 0.0,
             penetration_power: 100.0,
             previous_position: Vec3::ZERO,
+            age: 0.0,
+            distance_travelled: 0.0,
             owner: None,
         }
     }
@@ -122,6 +128,24 @@ impl Projectile {
     /// Builder pattern: set previous position
     pub fn with_previous_position(mut self, pos: Vec3) -> Self {
         self.previous_position = pos;
+        self
+    }
+
+    /// Builder pattern: set reference area
+    pub fn with_reference_area(mut self, area: f32) -> Self {
+        self.reference_area = area;
+        self
+    }
+
+    /// Builder pattern: set diameter
+    pub fn with_diameter(mut self, diameter: f32) -> Self {
+        self.diameter = diameter;
+        self
+    }
+
+    /// Builder pattern: set penetration power
+    pub fn with_penetration(mut self, power: f32) -> Self {
+        self.penetration_power = power;
         self
     }
 }

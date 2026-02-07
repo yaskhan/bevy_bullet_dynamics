@@ -36,6 +36,10 @@ pub fn update_projectiles_kinematics(
             integrate_euler(&mut transform, &mut bullet, dt, &env, effective_density);
         }
 
+        // Update age and distance
+        bullet.age += dt;
+        bullet.distance_travelled += bullet.velocity.length() * dt;
+
         // Update transform rotation to face velocity direction
         if bullet.velocity.length_squared() > 0.001 {
             transform.look_to(bullet.velocity.normalize(), Vec3::Y);
