@@ -551,34 +551,44 @@ pub fn spawn_explosion_vfx_from_event(
     mut explosion_events: MessageReader<ExplosionEvent>,
 ) {
     for event in explosion_events.read() {
-        spawn_explosion_vfx(
+        let (color, size_mult, lifetime, emissive_mult) = match event.explosion_type {
+            crate::events::ExplosionType::HighExplosive => (Color::srgb(1.0, 0.5, 0.0), 1.0, 0.5, 5.0),
+            crate::events::ExplosionType::Incendiary => (Color::srgb(1.0, 0.2, 0.0), 1.0, 2.0, 2.0),
+            crate::events::ExplosionType::Flash => (Color::WHITE, 2.0, 0.1, 20.0),
+            crate::events::ExplosionType::Smoke => (Color::srgb(0.5, 0.5, 0.5), 1.5, 5.0, 0.0),
+            _ => (Color::srgb(1.0, 1.0, 0.0), 1.0, 1.0, 1.0),
+        };
+
+        spawn_explosion_vfx_typed(
             &mut commands,
             &mut meshes,
             &mut materials,
             event.center,
-            event.radius,
-            10.0, // Default intensity
+            event.radius * size_mult,
+            10.0 * emissive_mult,
+            color,
+            lifetime,
         );
     }
 }
 
-/// Spawn explosion visual effect at position.
-/// 
-/// Creates an expanding glowing sphere effect for explosions.
-pub fn spawn_explosion_vfx(
+/// Spawn explosion visual effect at position with custom props.
+pub fn spawn_explosion_vfx_typed(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     position: Vec3,
     radius: f32,
     intensity: f32,
+    color: Color,
+    lifetime: f32,
 ) -> Entity {
     let mesh = meshes.add(Sphere::new(1.0));
     
     // Create fiery material
     let material = materials.add(StandardMaterial {
-        base_color: Color::srgba(1.0, 0.5, 0.1, 0.8),
-        emissive: LinearRgba::rgb(intensity * 3.0, intensity * 1.5, intensity * 0.2),
+        base_color: color,
+        emissive: LinearRgba::from(color) * intensity,
         alpha_mode: AlphaMode::Blend,
         unlit: true,
         ..default()
@@ -590,7 +600,7 @@ pub fn spawn_explosion_vfx(
         Transform::from_translation(position)
             .with_scale(Vec3::splat(0.1)), // Start small
         ExplosionVFX {
-            lifetime: 1.0,
+            lifetime,
             max_radius: radius,
             current_radius: 0.1,
             intensity,

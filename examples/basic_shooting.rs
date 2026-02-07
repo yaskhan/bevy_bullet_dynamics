@@ -116,6 +116,7 @@ enum WeaponType {
     Shotgun,
     Launcher,
     Laser,
+    Flamethrower,
 }
 
 impl WeaponType {
@@ -128,6 +129,7 @@ impl WeaponType {
             Self::Shotgun => "Shotgun",
             Self::Launcher => "Launcher",
             Self::Laser => "Laser",
+            Self::Flamethrower => "Flamethrower",
         }
     }
 
@@ -140,6 +142,7 @@ impl WeaponType {
             Self::Shotgun => 350.0,
             Self::Launcher => 50.0, // Slow missile
             Self::Laser => 0.0, // Instant
+            Self::Flamethrower => 15.0, // Slow flame
         }
     }
 
@@ -153,6 +156,7 @@ impl WeaponType {
             Self::Shotgun => presets::shotgun(),
             Self::Launcher => presets::rifle(), // Use rifle accuracy for now
             Self::Laser => presets::sniper(), // High accuracy
+            Self::Flamethrower => presets::shotgun(), // Wide spread
         }
     }
 
@@ -169,6 +173,10 @@ impl WeaponType {
             Self::Shotgun => { weapon.fire_rate = 1.5; }
             Self::Launcher => { weapon.fire_rate = 0.5; }
             Self::Laser => { weapon.fire_rate = 2.0; }
+            Self::Flamethrower => { 
+                weapon.fire_rate = 20.0; 
+                weapon.automatic = true;
+            }
         }
         weapon
     }
@@ -212,6 +220,10 @@ fn handle_input(
     }
     if keyboard.just_pressed(KeyCode::Digit7) {
         weapon_state.weapon_type = WeaponType::Laser;
+        changed = true;
+    }
+    if keyboard.just_pressed(KeyCode::Digit8) {
+        weapon_state.weapon_type = WeaponType::Flamethrower;
         changed = true;
     }
 
@@ -272,6 +284,7 @@ fn handle_input(
             WeaponType::Rifle => (1, 40.0),
             WeaponType::Launcher => (1, 150.0),
             WeaponType::Laser => (1, 60.0),
+            WeaponType::Flamethrower => (3, 5.0), // Many small flames
         };
 
         // Find target for homing
@@ -315,6 +328,30 @@ fn handle_input(
             if weapon_state.weapon_type == WeaponType::Laser {
                  entity_cmd.insert(ProjectileLogic::Hitscan { range: 1000.0 });
                  // Laser usually has Payload too (logic.rs handles damage via payload)
+            }
+
+            if weapon_state.weapon_type == WeaponType::Flamethrower {
+                // Short lived, slows down (high drag), explode on impact or time
+                entity_cmd.insert(ProjectileLogic::Timed { fuse: 1.0, elapsed: 0.0 });
+                entity_cmd.insert(Payload::Incendiary { 
+                    radius: 2.0, 
+                    damage_per_second: 10.0,
+                    duration: 3.0
+                });
+                // Increase drag manually?
+                // Projectile component has drag_coefficient.
+                // We'd need to modify the Projectile component on entity_cmd?
+                // But we spawn it with Projectile::new(velocity) which sets defaults.
+                // To set high drag, we must access it.
+                // Since `Projectile` is inserted in `spawn` tuple, we can overwrite it or modify it.
+                // Simplest is to overwrite:
+                entity_cmd.insert(Projectile {
+                    velocity,
+                    mass: 0.05,
+                    drag_coefficient: 2.0, // High drag
+                    reference_area: 0.05,
+                    ..default() 
+                });
             }
         }
 
