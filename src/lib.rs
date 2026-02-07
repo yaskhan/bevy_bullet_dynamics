@@ -130,6 +130,7 @@ impl Plugin for BallisticsCorePlugin {
                     systems::kinematics::update_guidance,
                     systems::kinematics::update_projectiles_kinematics,
                     systems::logic::process_projectile_logic,
+                    systems::logic::cleanup_expired_projectiles,
                 )
                     .chain(),
             );
@@ -217,6 +218,8 @@ impl Plugin for BallisticsVfxPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<resources::TracerPool>()
             .init_resource::<resources::DecalPool>()
+            .init_resource::<resources::BallisticsAssets>()
+            .add_systems(Startup, setup_ballistics_assets)
             .add_systems(
                 Update,
                 (
@@ -229,6 +232,49 @@ impl Plugin for BallisticsVfxPlugin {
                 ),
             );
     }
+}
+
+/// Setup common ballistics assets.
+fn setup_ballistics_assets(
+    mut assets: ResMut<resources::BallisticsAssets>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    assets.sphere_mesh = meshes.add(Sphere::new(1.0));
+    assets.tracer_mesh = meshes.add(Cylinder::new(0.02, 1.0));
+    
+    assets.spark_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(1.0, 0.7, 0.2),
+        emissive: LinearRgba::rgb(5.0, 3.0, 0.5),
+        ..default()
+    });
+    
+    assets.dust_material = materials.add(StandardMaterial {
+        base_color: Color::srgba(0.6, 0.5, 0.4, 0.8),
+        alpha_mode: AlphaMode::Blend,
+        ..default()
+    });
+    
+    assets.blood_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.5, 0.0, 0.0),
+        emissive: LinearRgba::rgb(0.3, 0.0, 0.0),
+        ..default()
+    });
+    
+    assets.flash_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(1.0, 0.9, 0.5),
+        emissive: LinearRgba::rgb(5.0, 4.0, 1.0),
+        unlit: true,
+        ..default()
+    });
+    
+    assets.explosion_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(1.0, 0.5, 0.0),
+        emissive: LinearRgba::rgb(10.0, 5.0, 0.0),
+        alpha_mode: AlphaMode::Blend,
+        unlit: true,
+        ..default()
+    });
 }
 
 /// Debug plugin for ballistics visualization.

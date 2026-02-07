@@ -205,8 +205,7 @@ fn handle_input(
     mut weapon_state: ResMut<WeaponState>,
     shooter: Query<&Transform, With<ShooterMarker>>,
     targets: Query<Entity, With<SurfaceMaterial>>, 
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    ballistics_assets: Res<BallisticsAssets>,
 ) {
     // Weapon selection
     let mut changed = false;
@@ -297,14 +296,6 @@ fn handle_input(
             5.0,
         );
 
-        // Create projectile assets
-        let projectile_mesh = meshes.add(Sphere::new(0.05));
-        let projectile_material = materials.add(StandardMaterial {
-            base_color: Color::srgb(1.0, 0.8, 0.2),
-            emissive: LinearRgba::rgb(5.0, 4.0, 1.0),
-            ..default()
-        });
-
         // Determine projectile count and damage
         let (projectile_count, damage) = match weapon_state.weapon_type {
             WeaponType::Shotgun => (8, 5.0),
@@ -362,18 +353,19 @@ fn handle_input(
             let velocity = elevated_direction * velocity_mag;
             
             let mut entity_cmd = commands.spawn((
-                Mesh3d(projectile_mesh.clone()),
-                MeshMaterial3d(projectile_material.clone()),
+                Mesh3d(ballistics_assets.sphere_mesh.clone()),
+                MeshMaterial3d(match weapon_state.weapon_type {
+                    WeaponType::Laser => ballistics_assets.flash_material.clone(),
+                    WeaponType::Flamethrower => ballistics_assets.explosion_material.clone(),
+                    _ => ballistics_assets.spark_material.clone(),
+                }),
                 Transform::from_translation(origin),
-                Projectile {
-                    velocity,
-                    mass,
-                    drag_coefficient: drag,
-                    diameter,
-                    spin,
-                    reference_area: std::f32::consts::PI * (diameter / 2.0).powi(2),
-                    ..default()
-                },
+                Projectile::new(velocity)
+                    .with_mass(mass)
+                    .with_drag(drag)
+                    .with_diameter(diameter)
+                    .with_penetration(100.0) // Default penetration
+                    .with_reference_area(std::f32::consts::PI * (diameter / 2.0).powi(2)),
                 Payload::Kinetic { damage },
                 ProjectileLogic::Impact,
             ));
@@ -408,15 +400,11 @@ fn handle_input(
                 });
                 
                 // Overwrite drag directly
-                entity_cmd.insert(Projectile {
-                    velocity,
-                    mass: 0.05,
-                    drag_coefficient: 2.0,
-                    reference_area: 0.05,
-                    diameter: 0.1,
-                    spin: 0.0,
-                    ..default()
-                });
+                entity_cmd.insert(Projectile::new(velocity)
+                    .with_mass(0.05)
+                    .with_drag(2.0)
+                    .with_diameter(0.1)
+                    .with_reference_area(0.05));
             }
 
             }

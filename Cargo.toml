@@ -37,12 +37,34 @@ harness = false
 [[example]]
 name = "basic_shooting"
 path = "examples/basic_shooting.rs"
+required-features = ["dim3"]
+
+[[example]]
+name = "basic_shooting_2d"
+path = "examples/basic_shooting_2d.rs"
+required-features = ["dim2"]
+
+[[example]]
+name = "advanced_shooting_2d"
+path = "examples/advanced_shooting_2d.rs"
+required-features = ["dim2"]
+
+[[example]]
+name = "surfaces_2d"
+path = "examples/surfaces_2d.rs"
+required-features = ["dim2"]
 
 [[example]]
 name = "grenades"
 path = "examples/grenades.rs"
+required-features = ["dim3"]
 
 [[example]]
 name = "multiplayer"
 path = "examples/multiplayer.rs"
-required-features = ["netcode"]
+required-features = ["netcode", "dim3"]
+
+[[example]]
+name = "headless_simulation"
+path = "examples/headless_simulation.rs"
+required-features = ["dim3"]

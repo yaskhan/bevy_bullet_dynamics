@@ -2,7 +2,11 @@
 
 use bevy::prelude::*;
 use bevy_bullet_dynamics::prelude::*;
+ 
+#[cfg(feature = "dim2")]
 use avian2d::prelude::*;
+#[cfg(feature = "dim3")]
+use avian3d::prelude::*;
 
 const PLAYER_SPEED: f32 = 200.0;
 const BULLET_SPEED: f32 = 600.0;
