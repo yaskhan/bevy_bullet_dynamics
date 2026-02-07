@@ -113,10 +113,20 @@ pub fn should_ricochet(
     surface: &SurfaceMaterial,
 ) -> bool {
     // Calculate impact angle (angle from surface normal)
-    let impact_angle = velocity.normalize().dot(-surface_normal).acos();
+    let dot = velocity.normalize().dot(-surface_normal);
+    
+    // Early return if projectile is moving AWAY from the surface normal (exiting)
+    // We use a small epsilon to avoid floating point issues.
+    // If velocity.dot(surface_normal) is positive, the projectile is moving away from the surface.
+    if velocity.dot(surface_normal) > 0.001 {
+        return false;
+    }
 
-    // Ricochet occurs when impact angle exceeds threshold (shallow impact)
-    impact_angle > surface.ricochet_angle
+    let impact_angle = dot.min(1.0).max(-1.0).acos();
+
+    // Ricochet occurs when impact angle is very shallow (near PI/2 from normal)
+    // The threshold is measured FROM the surface, so we compare with PI/2 - threshold
+    impact_angle > (std::f32::consts::FRAC_PI_2 - surface.ricochet_angle)
 }
 
 /// Calculate ricochet direction and speed.

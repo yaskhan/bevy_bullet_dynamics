@@ -59,7 +59,7 @@ pub fn handle_collisions(
             ray_origin,
             direction,
             ray_length,
-            true,
+            false,
             &filter,
         ) {
             let hit_point = ray_origin + *direction * hit.distance;
@@ -119,7 +119,7 @@ pub fn handle_collisions_2d(
             ray_origin,
             direction,
             ray_length,
-            true,
+            false,
             &filter,
         ) {
             let hit_point = ray_origin + *direction * hit.distance;
@@ -214,6 +214,13 @@ pub fn process_hit(
     let mut penetrated = false;
     let mut ricocheted = false;
 
+    // Early return if projectile is moving AWAY from the surface normal (exiting)
+    // and penetration is already handled or not needed.
+    // We use a small epsilon to avoid floating point issues.
+    if projectile.velocity.dot(hit_normal) > 0.001 {
+        return;
+    }
+
     if let Some(surface) = surface {
         // Ricochet
         if config.enable_ricochet && surface::should_ricochet(projectile.velocity, hit_normal, surface) {
@@ -237,7 +244,8 @@ pub fn process_hit(
                 if exit_vel.length() > config.min_projectile_speed {
                     penetrated = true;
                     projectile.velocity = exit_vel;
-                    // Do not snap transform for penetration, it's already past hit_point
+                    // Offset transform for penetration to avoid re-hitting entry point
+                    transform.translation = hit_point + projectile.velocity.normalize() * 0.05;
                 }
             }
         }

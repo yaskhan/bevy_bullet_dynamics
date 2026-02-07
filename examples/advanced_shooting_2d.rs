@@ -4,27 +4,50 @@ use bevy::prelude::*;
 use bevy_bullet_dynamics::prelude::*;
 
 const PLAYER_SPEED: f32 = 300.0;
+const ACTUAL_WALL_DISTANCE: f32 = 800.0; // From -400 to 400
+
+#[derive(Resource)]
+struct SimulationSettings {
+    virtual_range: f32, // Target distance to simulate (m)
+    base_gravity: Vec3,
+    base_air_density: f32,
+}
+
+#[cfg(feature = "dim2")]
+use avian2d::prelude::*;
+#[cfg(feature = "dim3")]
+use avian3d::prelude::*;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins({
+            #[cfg(feature = "dim2")] { PhysicsPlugins::default() }
+            #[cfg(feature = "dim3")] { PhysicsPlugins::default() }
+            #[cfg(not(any(feature = "dim2", feature = "dim3")))] { MinimalPlugins }
+        })
         .add_plugins(BallisticsPluginGroup)
         .insert_resource(BallisticsEnvironment {
-            gravity: Vec3::ZERO,
-            air_density: 1.15,
+            gravity: Vec3::new(0.0, -9.81, 0.0),
+            air_density: 1.225,
             wind: Vec3::ZERO,
             temperature: 20.0,
             altitude: 0.0,
             latitude: 0.0,
         })
+        .insert_resource(SimulationSettings {
+            virtual_range: ACTUAL_WALL_DISTANCE,
+            base_gravity: Vec3::new(0.0, -9.81, 0.0),
+            base_air_density: 1.225,
+        })
         .insert_resource(BallisticsConfig {
             use_rk4: true,
-            max_projectile_lifetime: 5.0,
-            max_projectile_distance: 1000.0,
+            max_projectile_lifetime: 10.0,
+            max_projectile_distance: 10000.0,
             enable_penetration: true,
             enable_ricochet: true,
             min_projectile_speed: 20.0,
-            debug_draw: false,
+            debug_draw: true,
         })
         .insert_resource(WeaponPresets::with_defaults())
         .add_systems(Startup, setup)
@@ -34,7 +57,11 @@ fn main() {
                 player_movement,
                 weapon_switching,
                 player_shooting,
+                simulation_controls,
+                update_environment,
+                handle_hits,
                 update_ui,
+                _cleanup_effects,
             ),
         )
         .run();
@@ -72,9 +99,41 @@ fn setup(mut commands: Commands) {
                 ..default()
             },
             Player,
-            Transform::from_xyz(0.0, 0.0, 0.0),
+            Transform::from_xyz(-400.0, 0.0, 0.0),
         ))
         .id();
+
+    // Wall (Target)
+    commands.spawn((
+        Sprite {
+            color: Color::srgb(0.5, 0.5, 0.5),
+            custom_size: Some(Vec2::new(40.0, 400.0)),
+            ..default()
+        },
+        Transform::from_xyz(400.0, 0.0, 0.0),
+        RigidBody::Static,
+        #[cfg(feature = "dim2")]
+        Collider::rectangle(40.0, 400.0),
+        #[cfg(feature = "dim3")]
+        Collider::cuboid(40.0, 400.0, 10.0),
+        bevy_bullet_dynamics::systems::surface::materials::concrete(),
+    ));
+
+    // Ground
+    commands.spawn((
+        Sprite {
+            color: Color::srgb(0.2, 0.5, 0.2),
+            custom_size: Some(Vec2::new(1000.0, 40.0)),
+            ..default()
+        },
+        Transform::from_xyz(0.0, -220.0, 0.0),
+        RigidBody::Static,
+        #[cfg(feature = "dim2")]
+        Collider::rectangle(1000.0, 40.0),
+        #[cfg(feature = "dim3")]
+        Collider::cuboid(1000.0, 40.0, 10.0),
+        bevy_bullet_dynamics::systems::surface::materials::dirt(),
+    ));
 
     commands.insert_resource(PlayerEntity(player_entity));
     commands.insert_resource(CurrentWeapon(0));
@@ -109,6 +168,12 @@ fn setup(mut commands: Commands) {
             TextFont { font_size: 18.0, ..default() },
             TextColor(Color::srgb(0.0, 1.0, 0.0)),
             WeaponInfoText,
+        ));
+        parent.spawn((
+            Text::new("Target Wall is at 400m\n"),
+            TextFont { font_size: 16.0, ..default() },
+            TextColor(Color::srgb(0.8, 0.8, 0.8)),
+            DistanceInfoText,
         ));
         parent.spawn((
             Text::new("Press SPACE to fire!\n"),
@@ -230,7 +295,8 @@ fn player_shooting(
                 Projectile::new(rotated_direction * spawn_params.velocity)
                     .with_owner(spawn_params.owner.unwrap())
                     .with_mass(spawn_params.mass)
-                    .with_drag(weapon_preset.drag_coefficient),
+                    .with_drag(weapon_preset.drag_coefficient)
+                    .with_previous_position(spawn_params.origin),
                 weapon_preset.accuracy.clone(),
                 Payload::Kinetic {
                     damage: spawn_params.damage,
@@ -249,12 +315,42 @@ fn player_shooting(
     }
 }
 
+#[derive(Component)]
+struct DistanceInfoText;
+
+fn simulation_controls(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut settings: ResMut<SimulationSettings>,
+) {
+    if keyboard_input.pressed(KeyCode::ArrowUp) {
+        settings.virtual_range += 10.0;
+    }
+    if keyboard_input.pressed(KeyCode::ArrowDown) {
+        settings.virtual_range = (settings.virtual_range - 10.0).max(ACTUAL_WALL_DISTANCE);
+    }
+}
+
+fn update_environment(
+    settings: Res<SimulationSettings>,
+    mut env: ResMut<BallisticsEnvironment>,
+) {
+    let factor = settings.virtual_range / ACTUAL_WALL_DISTANCE;
+    
+    // Scale gravity (squared factor because of t^2 in drop formula)
+    env.gravity = settings.base_gravity * factor * factor;
+    
+    // Scale air density (linear factor for drag simulation)
+    env.air_density = settings.base_air_density * factor;
+}
+
 fn update_ui(
-    mut weapon_info_query: Query<&mut Text, (With<WeaponInfoText>, Without<StatusText>)>,
-    mut status_query: Query<&mut Text, (With<StatusText>, Without<WeaponInfoText>)>,
+    mut weapon_info_query: Query<&mut Text, (With<WeaponInfoText>, Without<StatusText>, Without<DistanceInfoText>)>,
+    mut status_query: Query<&mut Text, (With<StatusText>, Without<WeaponInfoText>, Without<DistanceInfoText>)>,
+    mut distance_query: Query<&mut Text, (With<DistanceInfoText>, Without<WeaponInfoText>, Without<StatusText>)>,
     current_weapon: Res<CurrentWeapon>,
     player_stats: Res<PlayerStats>,
     weapon_presets: Res<WeaponPresets>,
+    settings: Res<SimulationSettings>,
 ) {
     let weapon_names = ["Pistol", "Rifle", "Sniper"];
     let current_weapon_name = weapon_names.get(current_weapon.0).unwrap_or(&"Unknown");
@@ -276,6 +372,53 @@ fn update_ui(
                 preset.base_damage,
                 preset.accuracy.base_spread + preset.accuracy.current_bloom
             );
+        }
+    }
+
+    if let Some(mut text) = distance_query.iter_mut().next() {
+        text.0 = format!(
+            "Visual distance: {:.0}m | SIMULATED RANGE: {:.0}m (Use Up/Down)\n",
+            ACTUAL_WALL_DISTANCE,
+            settings.virtual_range
+        );
+    }
+}
+
+fn handle_hits(
+    mut commands: Commands,
+    mut hit_events: MessageReader<HitEvent>,
+    mut stats: ResMut<PlayerStats>,
+) {
+    for event in hit_events.read() {
+        stats.hits += 1;
+        
+        // Spawn small impact effect
+        commands.spawn((
+            Sprite {
+                color: Color::srgb(1.0, 0.0, 0.0),
+                custom_size: Some(Vec2::new(5.0, 5.0)),
+                ..default()
+            },
+            Transform::from_translation(event.impact_point),
+            ImpactEffect { lifetime: 0.5 },
+        ));
+    }
+}
+
+#[derive(Component)]
+struct ImpactEffect {
+    lifetime: f32,
+}
+
+fn _cleanup_effects(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut ImpactEffect)>,
+    time: Res<Time>,
+) {
+    for (entity, mut effect) in query.iter_mut() {
+        effect.lifetime -= time.delta_secs();
+        if effect.lifetime <= 0.0 {
+            commands.entity(entity).despawn();
         }
     }
 }

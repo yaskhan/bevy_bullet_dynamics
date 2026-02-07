@@ -118,6 +118,12 @@ impl Projectile {
         self.owner = Some(owner);
         self
     }
+
+    /// Builder pattern: set previous position
+    pub fn with_previous_position(mut self, pos: Vec3) -> Self {
+        self.previous_position = pos;
+        self
+    }
 }
 
 /// Accuracy component for dynamic spread calculation.
