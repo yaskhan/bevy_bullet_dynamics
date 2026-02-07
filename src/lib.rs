@@ -125,6 +125,7 @@ impl Plugin for BallisticsCorePlugin {
                     systems::kinematics::update_projectiles_kinematics,
                     systems::collision::handle_collisions,
                     systems::logic::process_projectile_logic,
+                    systems::logic::apply_explosion_impulse,
                 )
                     .chain(),
             );

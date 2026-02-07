@@ -1,7 +1,7 @@
 //! Projectile logic system - handles timed fuses, proximity triggers, etc.
 
 use bevy::prelude::*;
-use bevy::ecs::message::MessageWriter;
+use bevy::ecs::message::{MessageWriter, MessageReader};
 
 use crate::components::{Payload, ProjectileLogic};
 use crate::events::{ExplosionEvent, ExplosionType};
@@ -241,6 +241,88 @@ pub mod presets {
             },
         )
     }
+}
+
+// ============================================================================
+// Explosion Impulse System
+// ============================================================================
+
+/// Component marker for entities that can receive explosion impulse.
+/// 
+/// Add this component to entities (like players, physics objects) that should
+/// be pushed by explosions.
+#[derive(bevy::prelude::Component, Default)]
+pub struct ExplosionAffected {
+    /// Mass of the affected entity (affects impulse strength)
+    pub mass: f32,
+}
+
+/// Apply physics impulse to nearby entities from explosions.
+/// 
+/// This system reads explosion events and applies outward impulse forces
+/// to all entities with ExplosionAffected component within the blast radius.
+/// Uses avian3d's LinearVelocity component for physics integration.
+#[cfg(feature = "dim3")]
+pub fn apply_explosion_impulse(
+    mut explosion_events: MessageReader<ExplosionEvent>,
+    mut affected_entities: Query<(Entity, &Transform, &ExplosionAffected, &mut avian3d::prelude::LinearVelocity)>,
+) {
+    for event in explosion_events.read() {
+        // Base impulse strength (can be tuned per explosion type)
+        let base_impulse = match event.explosion_type {
+            crate::events::ExplosionType::HighExplosive => 30.0,
+            crate::events::ExplosionType::Incendiary => 5.0,
+            crate::events::ExplosionType::Flash => 2.0,
+            crate::events::ExplosionType::Smoke => 0.5,
+            crate::events::ExplosionType::Fragmentation => 25.0,
+            crate::events::ExplosionType::Concussion => 50.0,
+            crate::events::ExplosionType::EMP => 0.0,
+        };
+
+        if base_impulse <= 0.0 {
+            continue;
+        }
+
+        for (entity, transform, affected, mut velocity) in affected_entities.iter_mut() {
+            // Skip if this entity is the explosion source
+            if Some(entity) == event.source {
+                continue;
+            }
+
+            let to_entity = transform.translation - event.center;
+            let distance = to_entity.length();
+
+            // Skip if outside blast radius
+            if distance >= event.radius || distance < 0.01 {
+                continue;
+            }
+
+            // Calculate impulse with distance falloff
+            let direction = to_entity.normalize();
+            let normalized_distance = distance / event.radius;
+            let falloff_factor = (1.0 - normalized_distance).powf(event.falloff);
+            
+            // Impulse inversely proportional to mass
+            let mass_factor = if affected.mass > 0.0 { 1.0 / affected.mass } else { 1.0 };
+            let impulse_magnitude = base_impulse * falloff_factor * mass_factor;
+            
+            // Add upward component for more interesting physics
+            let impulse_direction = (direction + Vec3::Y * 0.3).normalize();
+            let impulse = impulse_direction * impulse_magnitude;
+
+            // Apply impulse to velocity
+            velocity.0 += impulse;
+        }
+    }
+}
+
+/// Fallback when dim3 is not available
+#[cfg(not(feature = "dim3"))]
+pub fn apply_explosion_impulse(
+    mut _explosion_events: MessageReader<ExplosionEvent>,
+) {
+    // No physics without dim3 feature
+    for _ in _explosion_events.read() {}
 }
 
 #[cfg(test)]

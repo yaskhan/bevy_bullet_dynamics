@@ -244,6 +244,10 @@ pub enum ExplosionType {
     Smoke,
     /// Fragmentation (spawns additional projectiles)
     Fragmentation,
+    /// Concussion (high knockback, low damage)
+    Concussion,
+    /// EMP (disables electronics, no physical damage)
+    EMP,
 }
 
 /// Event for projectile penetration.
