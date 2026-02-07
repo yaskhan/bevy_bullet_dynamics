@@ -114,6 +114,7 @@ enum WeaponType {
     Sniper,
     SMG,
     Shotgun,
+    Launcher,
 }
 
 impl WeaponType {
@@ -124,6 +125,7 @@ impl WeaponType {
             Self::Sniper => "Sniper",
             Self::SMG => "SMG",
             Self::Shotgun => "Shotgun",
+            Self::Launcher => "Launcher",
         }
     }
 
@@ -134,6 +136,7 @@ impl WeaponType {
             Self::Sniper => 1200.0,
             Self::SMG => 400.0,
             Self::Shotgun => 350.0,
+            Self::Launcher => 50.0, // Slow missile
         }
     }
 
@@ -145,6 +148,7 @@ impl WeaponType {
             Self::Sniper => presets::sniper(),
             Self::SMG => presets::smg(),
             Self::Shotgun => presets::shotgun(),
+            Self::Launcher => presets::rifle(), // Use rifle accuracy for now
         }
     }
 
@@ -159,6 +163,7 @@ impl WeaponType {
                 weapon.automatic = true;
             }
             Self::Shotgun => { weapon.fire_rate = 1.5; }
+            Self::Launcher => { weapon.fire_rate = 0.5; }
         }
         weapon
     }
@@ -170,6 +175,7 @@ fn handle_input(
     time: Res<Time>,
     mut weapon_state: ResMut<WeaponState>,
     shooter: Query<&Transform, With<ShooterMarker>>,
+    targets: Query<Entity, With<SurfaceMaterial>>, 
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
@@ -193,6 +199,10 @@ fn handle_input(
     }
     if keyboard.just_pressed(KeyCode::Digit5) {
         weapon_state.weapon_type = WeaponType::Shotgun;
+        changed = true;
+    }
+    if keyboard.just_pressed(KeyCode::Digit6) {
+        weapon_state.weapon_type = WeaponType::Launcher;
         changed = true;
     }
 
@@ -251,6 +261,15 @@ fn handle_input(
             WeaponType::Pistol => (1, 30.0),
             WeaponType::SMG => (1, 15.0),
             WeaponType::Rifle => (1, 40.0),
+            WeaponType::Launcher => (1, 150.0),
+        };
+
+        // Find target for homing
+        let target_entity = if weapon_state.weapon_type == WeaponType::Launcher {
+            // Pick random target
+            targets.iter().next()
+        } else {
+            None
         };
 
         for i in 0..projectile_count {
@@ -258,8 +277,8 @@ fn handle_input(
             let final_direction = accuracy::apply_spread_to_direction(direction, spread_angle, seed);
 
             let velocity = final_direction * weapon_state.weapon_type.muzzle_velocity();
-
-            commands.spawn((
+            
+            let mut entity_cmd = commands.spawn((
                 Mesh3d(projectile_mesh.clone()),
                 MeshMaterial3d(projectile_material.clone()),
                 Transform::from_translation(origin),
@@ -267,6 +286,21 @@ fn handle_input(
                 Payload::Kinetic { damage },
                 ProjectileLogic::Impact,
             ));
+
+            if let Some(target) = target_entity {
+                entity_cmd.insert(Guidance {
+                    target: Some(target),
+                    turn_rate: 2.0, // Radians/sec
+                    delay: 0.2,
+                    elapsed: 0.0,
+                });
+                entity_cmd.insert(Payload::Explosive { 
+                    radius: 3.0, 
+                    damage,
+                    falloff: 0.5 
+                });
+                entity_cmd.insert(ProjectileLogic::Proximity { range: 1.0 });
+            }
         }
 
         // Apply bloom

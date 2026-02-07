@@ -142,6 +142,82 @@ fn calculate_acceleration(
     env.gravity - drag_accel
 }
 
+/// System to update projectile guidance towards target.
+/// 
+/// Adjusts the velocity vector of guided projectiles to steer them towards
+/// their assigned target entity. Uses the turn_rate to limit the rotation speed.
+/// 
+/// # Arguments
+/// * `time` - Bevy Time resource
+/// * `projectiles` - Query for guided projectiles
+/// * `transforms` - Query for global transforms (targets)
+pub fn update_guidance(
+    time: Res<Time>,
+    mut projectiles: Query<(&mut Projectile, &Transform, &mut crate::components::Guidance)>,
+    transforms: Query<&GlobalTransform>,
+) {
+    let dt = time.delta_secs();
+
+    for (mut projectile, transform, mut guidance) in projectiles.iter_mut() {
+        guidance.elapsed += dt;
+
+        // Check delay
+        if guidance.elapsed < guidance.delay {
+            continue;
+        }
+
+        // Check target
+        let Some(target_entity) = guidance.target else {
+            continue;
+        };
+
+        if let Ok(target_transform) = transforms.get(target_entity) {
+            let target_pos = target_transform.translation();
+            let current_pos = transform.translation;
+            let current_vel = projectile.velocity;
+
+            let direction_to_target = (target_pos - current_pos).normalize_or_zero();
+            
+            // Avoid steering if already there or zero velocity
+            if direction_to_target.length_squared() < 0.001 || current_vel.length_squared() < 0.001 {
+                continue;
+            }
+
+            let current_dir = current_vel.normalize();
+            let speed = current_vel.length();
+
+            // Calculate rotation needed
+            // Actually simpler: rotate `current_dir` towards `direction_to_target`
+            
+            // Calculate angle between current velocity and target direction
+            let angle = current_dir.angle_between(direction_to_target);
+            
+            // Limit by turn rate
+            let max_turn = guidance.turn_rate * dt;
+            
+            if angle < 0.001 {
+                continue;
+            }
+
+            let new_dir = if angle <= max_turn {
+                direction_to_target
+            } else {
+                // Slerp rotation
+                // Find rotation axis
+                let rotation_axis = current_dir.cross(direction_to_target).normalize_or_zero();
+                if rotation_axis.length_squared() < 0.001 {
+                    // Vectors are parallel or anti-parallel
+                     continue; 
+                }
+                let rotation = Quat::from_axis_angle(rotation_axis, max_turn);
+                rotation * current_dir
+            };
+
+            projectile.velocity = new_dir * speed;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -646,3 +646,37 @@ impl Weapon {
     }
 }
 
+/// Guidance component for homing projectiles (missiles).
+/// 
+/// This component enables a projectile to steer towards a target entity.
+/// 
+/// # Fields
+/// * `target` - Entity to seek
+/// * `turn_rate` - Maximum turn rate in radians per second
+/// * `delay` - Time before guidance activates (seconds)
+/// * `elapsed` - Time since spawn
+#[derive(Component, Reflect, Clone)]
+#[reflect(Component)]
+pub struct Guidance {
+    /// Target entity to follow
+    pub target: Option<Entity>,
+    /// Turn rate in radians per second
+    pub turn_rate: f32,
+    /// Delay before guidance activates (seconds)
+    pub delay: f32,
+    /// Time elapsed since spawn (seconds)
+    pub elapsed: f32,
+}
+
+impl Default for Guidance {
+    /// default: no target, no turn, delay 0.5s
+    fn default() -> Self {
+        Self {
+            target: None,
+            turn_rate: 1.0, // ~60 degrees/sec
+            delay: 0.5,
+            elapsed: 0.0,
+        }
+    }
+}
+

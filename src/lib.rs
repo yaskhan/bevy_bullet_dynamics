@@ -115,6 +115,7 @@ impl Plugin for BallisticsCorePlugin {
             .register_type::<components::ProjectileLogic>()
             .register_type::<components::Payload>()
             .register_type::<components::Weapon>()
+            .register_type::<components::Guidance>()
             .init_resource::<resources::BallisticsEnvironment>()
             .init_resource::<resources::BallisticsConfig>()
             .add_message::<events::FireEvent>()
@@ -124,6 +125,7 @@ impl Plugin for BallisticsCorePlugin {
                 FixedUpdate,
                 (
                     systems::accuracy::update_bloom,
+                    systems::kinematics::update_guidance,
                     systems::kinematics::update_projectiles_kinematics,
                     systems::collision::handle_collisions,
                     systems::logic::process_projectile_logic,
