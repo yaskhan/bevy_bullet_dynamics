@@ -46,6 +46,9 @@ pub fn process_projectile_logic(
             ProjectileLogic::Impact | ProjectileLogic::Sticky => {
                 // Handled by collision system
             }
+            ProjectileLogic::Hitscan { .. } => {
+                // Handled by process_hitscan system (or ignored if not dim3)
+            }
         }
     }
 }
@@ -109,6 +112,73 @@ fn trigger_explosion(
 
     // Despawn the projectile after explosion
     commands.entity(entity).despawn();
+}
+
+#[cfg(feature = "dim3")]
+use avian3d::prelude::*;
+#[cfg(feature = "dim3")]
+use crate::events::HitEvent;
+#[cfg(feature = "dim3")]
+use crate::resources::BallisticsConfig;
+#[cfg(feature = "dim3")]
+use crate::systems::collision;
+
+/// Process hitscan projectiles (lasers, railguns).
+/// 
+/// Performs an immediate raycast and despawns the projectile entity.
+#[cfg(feature = "dim3")]
+pub fn process_hitscan(
+    mut commands: Commands,
+    mut hit_events: MessageWriter<HitEvent>,
+    config: Res<BallisticsConfig>,
+    spatial_query: SpatialQuery,
+    projectiles: Query<(Entity, &Transform, &ProjectileLogic, Option<&Payload>)>,
+) {
+    for (entity, transform, logic, payload) in projectiles.iter() {
+        if let ProjectileLogic::Hitscan { range } = logic {
+            let start = transform.translation;
+            let direction = transform.forward(); // Assuming -Z is forward? No, usually Bevy forward is -Z. 
+            // Transform::forward() returns Dir3 (-Z).
+            
+            // Filter out self (though hitscan usually spawned fresh)
+            let filter = SpatialQueryFilter::default().with_excluded_entities([entity]);
+
+            if let Some(hit) = spatial_query.cast_ray(
+                start,
+                direction,
+                *range,
+                true,
+                &filter,
+            ) {
+                let hit_point = start + *direction * hit.distance;
+                // We need to fetch surface? process_hit expects it.
+                // We can try to query it? Or just pass None for now.
+                // Since we don't have access to Surfaces query here easily without adding it to params.
+                // Let's assume None for now or add the query.
+                
+                // Construct a dummy projectile component for process_hit
+                // process_hit uses it for previous_position (not relevant for hitscan) and drag (not relevant).
+                // But it takes &Projectile.
+                let dummy_projectile = crate::components::Projectile::default();
+
+                collision::process_hit(
+                    &mut commands,
+                    &mut hit_events,
+                    &config,
+                    entity,
+                    &dummy_projectile,
+                    payload,
+                    hit.entity,
+                    hit_point,
+                    hit.normal,
+                    None, // No surface info for now
+                );
+            }
+
+            // Hitscan is instant, despawn immediately
+            commands.entity(entity).despawn();
+        }
+    }
 }
 
 /// Calculate explosion damage with distance falloff.

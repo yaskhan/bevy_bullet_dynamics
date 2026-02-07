@@ -115,6 +115,7 @@ enum WeaponType {
     SMG,
     Shotgun,
     Launcher,
+    Laser,
 }
 
 impl WeaponType {
@@ -126,6 +127,7 @@ impl WeaponType {
             Self::SMG => "SMG",
             Self::Shotgun => "Shotgun",
             Self::Launcher => "Launcher",
+            Self::Laser => "Laser",
         }
     }
 
@@ -137,6 +139,7 @@ impl WeaponType {
             Self::SMG => 400.0,
             Self::Shotgun => 350.0,
             Self::Launcher => 50.0, // Slow missile
+            Self::Laser => 0.0, // Instant
         }
     }
 
@@ -149,6 +152,7 @@ impl WeaponType {
             Self::SMG => presets::smg(),
             Self::Shotgun => presets::shotgun(),
             Self::Launcher => presets::rifle(), // Use rifle accuracy for now
+            Self::Laser => presets::sniper(), // High accuracy
         }
     }
 
@@ -164,6 +168,7 @@ impl WeaponType {
             }
             Self::Shotgun => { weapon.fire_rate = 1.5; }
             Self::Launcher => { weapon.fire_rate = 0.5; }
+            Self::Laser => { weapon.fire_rate = 2.0; }
         }
         weapon
     }
@@ -203,6 +208,10 @@ fn handle_input(
     }
     if keyboard.just_pressed(KeyCode::Digit6) {
         weapon_state.weapon_type = WeaponType::Launcher;
+        changed = true;
+    }
+    if keyboard.just_pressed(KeyCode::Digit7) {
+        weapon_state.weapon_type = WeaponType::Laser;
         changed = true;
     }
 
@@ -262,6 +271,7 @@ fn handle_input(
             WeaponType::SMG => (1, 15.0),
             WeaponType::Rifle => (1, 40.0),
             WeaponType::Launcher => (1, 150.0),
+            WeaponType::Laser => (1, 60.0),
         };
 
         // Find target for homing
@@ -300,6 +310,11 @@ fn handle_input(
                     falloff: 0.5 
                 });
                 entity_cmd.insert(ProjectileLogic::Proximity { range: 1.0 });
+            }
+
+            if weapon_state.weapon_type == WeaponType::Laser {
+                 entity_cmd.insert(ProjectileLogic::Hitscan { range: 1000.0 });
+                 // Laser usually has Payload too (logic.rs handles damage via payload)
             }
         }
 

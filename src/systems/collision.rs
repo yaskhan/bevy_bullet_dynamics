@@ -135,7 +135,7 @@ pub fn handle_collisions(
 /// * `hit_normal` - Surface normal vector at the impact point
 /// * `surface` - Optional reference to the surface material component
 #[allow(dead_code)]
-fn process_hit(
+pub fn process_hit(
     commands: &mut Commands,
     hit_events: &mut MessageWriter<HitEvent>,
     config: &BallisticsConfig,

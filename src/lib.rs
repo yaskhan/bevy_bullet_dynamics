@@ -133,6 +133,11 @@ impl Plugin for BallisticsCorePlugin {
                 )
                     .chain(),
             );
+        
+        #[cfg(feature = "dim3")]
+        {
+            app.add_systems(FixedUpdate, systems::logic::process_hitscan);
+        }
     }
 }
 

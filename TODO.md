@@ -33,7 +33,7 @@
 - [x] Дробовики (множественные projectiles)
 - [x] Автоматическое оружие (fire rate, burst mode)
 - [x] Управляемые ракеты (homing)
-- [ ] Лазерное оружие (hitscan)
+- [x] Лазерное оружие (hitscan)
 - [ ] Огнемёты (area damage over time)
 
 ### Улучшение физики

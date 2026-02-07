@@ -222,6 +222,11 @@ pub enum ProjectileLogic {
         /// Detection range (meters)
         range: f32,
     },
+    /// Hitscan: immediate raycast, no flight time
+    Hitscan {
+        /// Maximum range (meters)
+        range: f32,
+    },
     /// Arrow/bolt: sticks on impact
     Sticky,
 }
