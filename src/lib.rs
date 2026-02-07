@@ -113,7 +113,6 @@ impl Plugin for BallisticsCorePlugin {
         app.register_type::<components::Projectile>()
             .register_type::<components::Accuracy>()
             .register_type::<components::ProjectileLogic>()
-            .register_type::<components::ProjectileLogic>()
             .register_type::<components::Payload>()
             .register_type::<components::Weapon>()
             .register_type::<components::Guidance>()
@@ -122,6 +121,8 @@ impl Plugin for BallisticsCorePlugin {
             .add_message::<events::FireEvent>()
             .add_message::<events::HitEvent>()
             .add_message::<events::ExplosionEvent>()
+            .add_message::<events::PenetrationEvent>()
+            .add_message::<events::RicochetEvent>()
             .add_systems(
                 FixedUpdate,
                 (

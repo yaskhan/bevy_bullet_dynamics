@@ -173,7 +173,7 @@ fn handle_input(
 
     // Throw
     if keyboard.just_pressed(KeyCode::Space) {
-        let Ok(thrower_transform) = thrower.single() else {
+        let Some(thrower_transform) = thrower.iter().next() else {
             return;
         };
 
@@ -202,6 +202,8 @@ fn handle_input(
                 mass: 0.5,             // Heavy
                 drag_coefficient: 0.5, // High drag
                 reference_area: 0.01,
+                diameter: 0.05,        // 50mm
+                spin: 0.0,
                 penetration_power: 0.0, // Doesn't penetrate
                 previous_position: origin,
                 owner: None,

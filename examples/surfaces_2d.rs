@@ -1,10 +1,6 @@
 //! 2D surface interaction example with penetration and ricochets.
-//!
-//! This example demonstrates how to use the surface interaction system in 2D,
-//! including penetration, ricochets, and different material properties.
 
 use bevy::prelude::*;
-use bevy::render::camera::ScalingMode;
 use bevy_bullet_dynamics::prelude::*;
 
 const PLAYER_SPEED: f32 = 200.0;
@@ -12,14 +8,15 @@ const BULLET_SPEED: f32 = 600.0;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(low_latency_window_plugin()))
+        .add_plugins(DefaultPlugins)
         .add_plugins(BallisticsPluginGroup)
         .insert_resource(BallisticsEnvironment {
-            gravity: Vec3::ZERO, // No gravity in 2D top-down
-            air_density: 1.2,   // Higher for more drag
+            gravity: Vec3::ZERO,
+            air_density: 1.2,
             wind: Vec3::ZERO,
             temperature: 20.0,
             altitude: 0.0,
+            latitude: 0.0,
         })
         .insert_resource(BallisticsConfig {
             use_rk4: true,
@@ -49,12 +46,7 @@ struct Player;
 struct PlayerUI;
 
 #[derive(Component)]
-struct Wall;
-
-#[derive(Component)]
-struct Obstacle {
-    material_type: MaterialType,
-}
+struct Obstacle;
 
 #[derive(Resource)]
 struct PlayerEntity(Entity);
@@ -84,36 +76,18 @@ impl MaterialType {
             MaterialType::Glass => Color::srgb(0.7, 0.8, 0.9),
         }
     }
-
-    fn surface_material(&self) -> SurfaceMaterial {
-        match self {
-            MaterialType::Concrete => systems::surface::materials::concrete(),
-            MaterialType::Metal => systems::surface::materials::metal(),
-            MaterialType::Wood => systems::surface::materials::wood(),
-            MaterialType::Glass => systems::surface::materials::glass(),
-        }
-    }
 }
 
 fn setup(mut commands: Commands) {
     // Camera setup for 2D
-    commands.spawn(Camera2dBundle {
-        projection: OrthographicProjection {
-            scaling_mode: ScalingMode::WindowSize(1.0),
-            ..default()
-        },
-        ..default()
-    });
+    commands.spawn(Camera2d);
 
     // Spawn player
     let player_entity = commands
         .spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::srgb(0.0, 0.8, 1.0),
-                    custom_size: Some(Vec2::new(30.0, 30.0)),
-                    ..default()
-                },
+            Sprite {
+                color: Color::srgb(0.0, 0.8, 1.0),
+                custom_size: Some(Vec2::new(30.0, 30.0)),
                 ..default()
             },
             Player,
@@ -129,134 +103,76 @@ fn setup(mut commands: Commands) {
         hits: 0,
     });
 
-    // Spawn various obstacles with different materials
+    // Spawn obstacles
     spawn_obstacles(&mut commands);
 
-    // Spawn UI
+    // Spawn UI (Bevy 0.18 style)
     commands.spawn((
-        TextBundle::from_sections([
-            TextSection::new(
-                "2D Surface Interactions Demo\n",
-                TextStyle {
-                    font_size: 30.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            TextSection::new(
-                "WASD: Move | SPACE: Shoot\n",
-                TextStyle {
-                    font_size: 20.0,
-                    color: Color::YELLOW,
-                    ..default()
-                },
-            ),
-            TextSection::new(
-                "Shots: 0 | Hits: 0 | Penetrations: 0 | Ricochets: 0\n",
-                TextStyle {
-                    font_size: 18.0,
-                    color: Color::GREEN,
-                    ..default()
-                },
-            ),
-            TextSection::new(
-                "Materials: Gray=Concrete | Silver=Metal | Brown=Wood | Blue=Glass\n",
-                TextStyle {
-                    font_size: 16.0,
-                    color: Color::BLUE,
-                    ..default()
-                },
-            ),
-        ])
-        .with_style(Style {
+        Node {
             position_type: PositionType::Absolute,
             top: Val::Px(10.0),
             left: Val::Px(10.0),
+            flex_direction: FlexDirection::Column,
             ..default()
-        }),
+        },
         PlayerUI,
-    ));
+    )).with_children(|parent| {
+        parent.spawn((
+            Text::new("2D Surface Interactions Demo\n"),
+            TextFont { font_size: 30.0, ..default() },
+        ));
+        parent.spawn((
+            Text::new("WASD: Move | SPACE: Shoot\n"),
+            TextFont { font_size: 20.0, ..default() },
+            TextColor(Color::srgb(1.0, 1.0, 0.0)),
+        ));
+        parent.spawn((
+            Text::new("Shots: 0 | Hits: 0 | Penetrations: 0 | Ricochets: 0\n"),
+            TextFont { font_size: 18.0, ..default() },
+            TextColor(Color::srgb(0.0, 1.0, 0.0)),
+            StatsText,
+        ));
+    });
 }
 
+#[derive(Component)]
+struct StatsText;
+
 fn spawn_obstacles(commands: &mut Commands) {
-    // Spawn concrete walls
+    // Concrete
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
-                color: MaterialType::Concrete.color(),
-                custom_size: Some(Vec2::new(200.0, 30.0)),
-                ..default()
-            },
+        Sprite {
+            color: MaterialType::Concrete.color(),
+            custom_size: Some(Vec2::new(200.0, 30.0)),
             ..default()
         },
-        Obstacle {
-            material_type: MaterialType::Concrete,
-        },
+        Obstacle,
         Transform::from_xyz(250.0, 100.0, 0.0),
+        bevy_bullet_dynamics::systems::surface::materials::concrete(),
     ));
 
-    // Spawn metal barriers
+    // Metal
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
-                color: MaterialType::Metal.color(),
-                custom_size: Some(Vec2::new(150.0, 20.0)),
-                ..default()
-            },
+        Sprite {
+            color: MaterialType::Metal.color(),
+            custom_size: Some(Vec2::new(150.0, 20.0)),
             ..default()
         },
-        Obstacle {
-            material_type: MaterialType::Metal,
-        },
+        Obstacle,
         Transform::from_xyz(-200.0, 150.0, 0.0),
+        bevy_bullet_dynamics::systems::surface::materials::metal(),
     ));
 
-    // Spawn wooden crates
+    // Wood
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
-                color: MaterialType::Wood.color(),
-                custom_size: Some(Vec2::new(60.0, 60.0)),
-                ..default()
-            },
+        Sprite {
+            color: MaterialType::Wood.color(),
+            custom_size: Some(Vec2::new(60.0, 60.0)),
             ..default()
         },
-        Obstacle {
-            material_type: MaterialType::Wood,
-        },
+        Obstacle,
         Transform::from_xyz(150.0, -100.0, 0.0),
-    ));
-
-    // Spawn glass panels
-    commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
-                color: MaterialType::Glass.color(),
-                custom_size: Some(Vec2::new(100.0, 40.0)),
-                ..default()
-            },
-            ..default()
-        },
-        Obstacle {
-            material_type: MaterialType::Glass,
-        },
-        Transform::from_xyz(-150.0, -150.0, 0.0),
-    ));
-
-    // Another concrete wall
-    commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
-                color: MaterialType::Concrete.color(),
-                custom_size: Some(Vec2::new(30.0, 200.0)),
-                ..default()
-            },
-            ..default()
-        },
-        Obstacle {
-            material_type: MaterialType::Concrete,
-        },
-        Transform::from_xyz(0.0, 200.0, 0.0),
+        bevy_bullet_dynamics::systems::surface::materials::wood(),
     ));
 }
 
@@ -265,25 +181,26 @@ fn player_movement(
     mut player_query: Query<&mut Transform, With<Player>>,
     time: Res<Time>,
 ) {
-    let mut player_transform = player_query.single_mut();
-    let mut direction = Vec3::ZERO;
+    if let Some(mut player_transform) = player_query.iter_mut().next() {
+        let mut direction = Vec3::ZERO;
 
-    if keyboard_input.pressed(KeyCode::KeyW) {
-        direction.y += 1.0;
-    }
-    if keyboard_input.pressed(KeyCode::KeyS) {
-        direction.y -= 1.0;
-    }
-    if keyboard_input.pressed(KeyCode::KeyA) {
-        direction.x -= 1.0;
-    }
-    if keyboard_input.pressed(KeyCode::KeyD) {
-        direction.x += 1.0;
-    }
+        if keyboard_input.pressed(KeyCode::KeyW) {
+            direction.y += 1.0;
+        }
+        if keyboard_input.pressed(KeyCode::KeyS) {
+            direction.y -= 1.0;
+        }
+        if keyboard_input.pressed(KeyCode::KeyA) {
+            direction.x -= 1.0;
+        }
+        if keyboard_input.pressed(KeyCode::KeyD) {
+            direction.x += 1.0;
+        }
 
-    if direction != Vec3::ZERO {
-        direction = direction.normalize();
-        player_transform.translation += direction * PLAYER_SPEED * time.delta_seconds();
+        if direction != Vec3::ZERO {
+            direction = direction.normalize();
+            player_transform.translation += direction * PLAYER_SPEED * time.delta_secs();
+        }
     }
 }
 
@@ -293,62 +210,54 @@ fn player_shooting(
     player_query: Query<&Transform, With<Player>>,
     player_entity: Res<PlayerEntity>,
     mut game_stats: ResMut<GameStats>,
-    time: Res<Time>,
+    mut fire_events: MessageWriter<FireEvent>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        let player_transform = player_query.get(player_entity.0).unwrap();
-        
-        // Calculate shoot direction (towards mouse cursor would be better in a real game)
-        let direction = Vec3::X; // Shooting right by default
-        
-        // Create projectile spawn parameters
-        let spawn_params = ProjectileSpawnParams::new(
-            player_transform.translation + direction * 20.0, // Spawn slightly in front of player
-            direction,
-            BULLET_SPEED,
-        )
-        .with_damage(50.0)
-        .with_owner(player_entity.0);
+        if let Ok(player_transform) = player_query.get(player_entity.0) {
+            let direction = Vec3::X;
+            
+            let spawn_params = ProjectileSpawnParams::new(
+                player_transform.translation + direction * 20.0,
+                direction,
+                BULLET_SPEED,
+            )
+            .with_damage(50.0)
+            .with_owner(player_entity.0);
 
-        // Spawn the projectile with physics components
-        commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::srgb(1.0, 0.8, 0.2), // Yellow bullet
+            commands.spawn((
+                Sprite {
+                    color: Color::srgb(1.0, 0.8, 0.2),
                     custom_size: Some(Vec2::new(5.0, 3.0)),
                     ..default()
                 },
-                transform: Transform::from_translation(spawn_params.origin)
+                Transform::from_translation(spawn_params.origin)
                     .with_rotation(Quat::from_rotation_z(
                         spawn_params.direction.y.atan2(spawn_params.direction.x),
                     )),
-                ..default()
-            },
-            Projectile::new(spawn_params.direction * spawn_params.velocity)
-                .with_owner(spawn_params.owner.unwrap())
-                .with_mass(0.008) // Light bullet
-                .with_drag(0.25), // Low drag for longer range
-            Accuracy::default(),
-            Payload::Kinetic {
-                damage: spawn_params.damage,
-            },
-            ProjectileLogic::Impact,
-        ));
+                Projectile::new(spawn_params.direction * spawn_params.velocity)
+                    .with_owner(spawn_params.owner.unwrap())
+                    .with_mass(0.008)
+                    .with_drag(0.25),
+                Accuracy::default(),
+                Payload::Kinetic {
+                    damage: spawn_params.damage,
+                },
+                ProjectileLogic::Impact,
+            ));
 
-        // Fire event for systems to pick up
-        commands.trigger(FireEvent::new(
-            spawn_params.origin,
-            spawn_params.direction,
-            spawn_params.velocity,
-        ));
+            fire_events.write(FireEvent::new(
+                spawn_params.origin,
+                spawn_params.direction,
+                spawn_params.velocity,
+            ));
 
-        // Update game stats
-        game_stats.shots_fired += 1;
+            game_stats.shots_fired += 1;
+        }
     }
 }
 
 fn handle_hits(
-    mut hit_events: EventReader<HitEvent>,
+    mut hit_events: MessageReader<HitEvent>,
     mut game_stats: ResMut<GameStats>,
 ) {
     for event in hit_events.read() {
@@ -365,16 +274,16 @@ fn handle_hits(
 }
 
 fn update_ui(
-    mut ui_query: Query<&mut Text, With<PlayerUI>>,
+    mut ui_query: Query<&mut Text, With<StatsText>>,
     game_stats: Res<GameStats>,
 ) {
-    let mut text = ui_query.single_mut();
-    
-    text.sections[2].value = format!(
-        "Shots: {} | Hits: {} | Penetrations: {} | Ricochets: {}\n",
-        game_stats.shots_fired,
-        game_stats.hits,
-        game_stats.penetrations,
-        game_stats.ricochets
-    );
+    if let Some(mut text) = ui_query.iter_mut().next() {
+        text.0 = format!(
+            "Shots: {} | Hits: {} | Penetrations: {} | Ricochets: {}\n",
+            game_stats.shots_fired,
+            game_stats.hits,
+            game_stats.penetrations,
+            game_stats.ricochets
+        );
+    }
 }
