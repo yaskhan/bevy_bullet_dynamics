@@ -26,6 +26,8 @@ pub fn handle_collisions(
     config: Res<BallisticsConfig>,
     spatial_query: avian3d::prelude::SpatialQuery,
     mut hit_events: MessageWriter<HitEvent>,
+    mut ricochet_events: MessageWriter<crate::events::RicochetEvent>,
+    mut penetration_events: MessageWriter<crate::events::PenetrationEvent>,
     mut projectiles: Query<(Entity, &mut Transform, &mut Projectile, Option<&Payload>)>,
     surfaces: Query<&SurfaceMaterial>,
 ) {
@@ -64,6 +66,8 @@ pub fn handle_collisions(
             process_hit(
                 &mut commands,
                 &mut hit_events,
+                &mut ricochet_events,
+                &mut penetration_events,
                 &config,
                 entity,
                 &mut transform,
@@ -87,6 +91,8 @@ pub fn handle_collisions_2d(
     config: Res<BallisticsConfig>,
     spatial_query: avian2d::prelude::SpatialQuery,
     mut hit_events: MessageWriter<HitEvent>,
+    mut ricochet_events: MessageWriter<crate::events::RicochetEvent>,
+    mut penetration_events: MessageWriter<crate::events::PenetrationEvent>,
     mut projectiles: Query<(Entity, &mut Transform, &mut Projectile, Option<&Payload>)>,
     surfaces: Query<&SurfaceMaterial>,
 ) {
@@ -129,6 +135,8 @@ pub fn handle_collisions_2d(
             process_hit(
                 &mut commands,
                 &mut hit_events,
+                &mut ricochet_events,
+                &mut penetration_events,
                 &config,
                 entity,
                 &mut transform,
@@ -192,6 +200,8 @@ pub fn handle_collisions(
 pub fn process_hit(
     commands: &mut Commands,
     hit_events: &mut MessageWriter<HitEvent>,
+    ricochet_events: &mut MessageWriter<crate::events::RicochetEvent>,
+    penetration_events: &mut MessageWriter<crate::events::PenetrationEvent>,
     config: &BallisticsConfig,
     projectile_entity: Entity,
     transform: &mut Transform,
@@ -228,6 +238,15 @@ pub fn process_hit(
                 projectile.velocity = new_dir * new_speed;
                 // Offset hit point slightly along normal to avoid getting stuck inside
                 transform.translation = hit_point + hit_normal * 0.05;
+
+                // Fire Ricochet Event
+                ricochet_events.write(crate::events::RicochetEvent {
+                    projectile: projectile_entity,
+                    impact_point: hit_point,
+                    new_direction: new_dir,
+                    new_speed,
+                    surface: hit_entity,
+                });
             }
         } 
         // Penetration
@@ -243,6 +262,15 @@ pub fn process_hit(
                     projectile.velocity = exit_vel;
                     // Offset transform for penetration to avoid re-hitting entry point
                     transform.translation = hit_point + projectile.velocity.normalize() * 0.05;
+
+                    // Fire Penetration Event
+                    penetration_events.write(crate::events::PenetrationEvent {
+                        projectile: projectile_entity,
+                        entry_point: hit_point,
+                        exit_point: transform.translation,
+                        target: hit_entity,
+                        remaining_power: dynamic_power - surface.penetration_loss,
+                    });
                 }
             }
         }

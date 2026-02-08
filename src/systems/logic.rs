@@ -145,6 +145,8 @@ use crate::systems::collision;
 pub fn process_hitscan(
     mut commands: Commands,
     mut hit_events: MessageWriter<HitEvent>,
+    mut ricochet_events: MessageWriter<crate::events::RicochetEvent>,
+    mut penetration_events: MessageWriter<crate::events::PenetrationEvent>,
     config: Res<BallisticsConfig>,
     spatial_query: avian3d::prelude::SpatialQuery,
     projectiles: Query<(Entity, &Transform, &ProjectileLogic, Option<&Payload>)>,
@@ -170,6 +172,8 @@ pub fn process_hitscan(
                 collision::process_hit(
                     &mut commands,
                     &mut hit_events,
+                    &mut ricochet_events,
+                    &mut penetration_events,
                     &config,
                     entity,
                     &mut temp_transform,
@@ -192,6 +196,8 @@ pub fn process_hitscan(
 pub fn process_hitscan_2d(
     mut commands: Commands,
     mut hit_events: MessageWriter<HitEvent>,
+    mut ricochet_events: MessageWriter<crate::events::RicochetEvent>,
+    mut penetration_events: MessageWriter<crate::events::PenetrationEvent>,
     config: Res<BallisticsConfig>,
     spatial_query: avian2d::prelude::SpatialQuery,
     projectiles: Query<(Entity, &Transform, &ProjectileLogic, Option<&Payload>)>,
@@ -224,6 +230,8 @@ pub fn process_hitscan_2d(
                 collision::process_hit(
                     &mut commands,
                     &mut hit_events,
+                    &mut ricochet_events,
+                    &mut penetration_events,
                     &config,
                     entity,
                     &mut temp_transform,

@@ -361,6 +361,7 @@ fn handle_input(
                 }),
                 Transform::from_translation(origin),
                 Projectile::new(velocity)
+                    .with_previous_position(origin)
                     .with_mass(mass)
                     .with_drag(drag)
                     .with_diameter(diameter)
@@ -401,6 +402,7 @@ fn handle_input(
                 
                 // Overwrite drag directly
                 entity_cmd.insert(Projectile::new(velocity)
+                    .with_previous_position(origin)
                     .with_mass(0.05)
                     .with_drag(2.0)
                     .with_diameter(0.1)
